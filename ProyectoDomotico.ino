@@ -34,7 +34,9 @@
 #include "motor.h"       // motor_init, garaje_abrir, garaje_cerrar
 #include "temperatura.h" // temp_init, temp_celsius, temp_controlar
 #include "dimmer.h"      // dimmer_init, dimmer_set, dimmer_get, DIMMER_NIVEL_MAX
-
+#include "horno.h"
+#include "sonido.h"
+#include "mercado.h"
 // Fases siguientes — comentados hasta que se implemente cada modulo.
 // Cuando una fase este lista: descomentar el include correspondiente,
 // llamar a su _init() en setup() y su _actualizar() en loop().
@@ -449,6 +451,91 @@ static void procesar_comando_serial(char* comando) {
         usart_enviar_string("OK:GARAJE_CERRADO");
         usart_enviar_newline();
 
+     } else if (strncmp(comando, "HORNO:", 6) == 0) {
+
+        // Formato: HORNO:<temp>,<min>  ej. "HORNO:180,25"
+        // comando+6 apunta a "180,25"
+        char* args = comando + 6;
+
+        uint8_t temp = texto_a_numero(args);
+
+        // Buscar la coma para saltar al segundo argumento (minutos)
+        char* coma = strchr(args, ',');
+        uint8_t minutos = 0;
+        if (coma != NULL) {
+            minutos = texto_a_numero(coma + 1);
+        }
+
+        horno_encender(temp, minutos);
+
+        lcd_goto(0, 0);
+        lcd_string("HORNO: ON       ");
+
+        usart_enviar_string("OK:HORNO,");
+        usart_enviar_int(temp);
+        usart_enviar_string(",");
+        usart_enviar_int(minutos);
+        usart_enviar_newline();
+
+    } else if (strncmp(comando, "SONIDO:ON,", 10) == 0) {
+
+        // Formato: SONIDO:ON,<volumen>  ej. "SONIDO:ON,75"
+        uint8_t volumen = texto_a_numero(comando + 10);
+
+        sonido_encender(volumen);
+
+        usart_enviar_string("OK:SONIDO_ON,");
+        usart_enviar_int(volumen);
+        usart_enviar_newline();
+
+    } else if (strncmp(comando, "SONIDO:OFF", 10) == 0) {
+
+        sonido_apagar();
+
+        usart_enviar_string("OK:SONIDO_OFF");
+        usart_enviar_newline();
+
+    } else if (strncmp(comando, "MERCADO:ADD,", 12) == 0) {
+
+        // Formato: MERCADO:ADD,<nombre>,<cantidad>  ej. "MERCADO:ADD,leche,2"
+        char* args = comando + 12;
+
+        char* coma = strchr(args, ',');
+        if (coma != NULL) {
+
+            // Separar nombre y cantidad cortando el string en la coma
+            *coma = '\0';                 // terminar el nombre justo en la coma
+            uint8_t cantidad = texto_a_numero(coma + 1);
+
+            if (mercado_agregar(args, cantidad)) {
+                usart_enviar_string("OK:MERCADO_AGREGADO");
+            } else {
+                usart_enviar_string("ERROR:MERCADO_LLENO_O_DUPLICADO");
+            }
+        } else {
+            usart_enviar_string("ERROR:FORMATO_MERCADO");
+        }
+        usart_enviar_newline();
+
+    } else if (strncmp(comando, "MERCADO:DEL,", 12) == 0) {
+
+        char* nombre = comando + 12;
+
+        if (mercado_eliminar(nombre)) {
+            usart_enviar_string("OK:MERCADO_ELIMINADO");
+        } else {
+            usart_enviar_string("ERROR:MERCADO_NO_ENCONTRADO");
+        }
+        usart_enviar_newline();
+
+    } else if (strncmp(comando, "MERCADO:LIST", 12) == 0) {
+
+        usart_enviar_string("--- LISTA DE MERCADO ---");
+        usart_enviar_newline();
+        mercado_listar();   // esta funcion ya envia cada item + newline internamente
+
+
+
     // ── COMANDO DESCONOCIDO ───────────────────────────────────────────────────
     } else {
         // Ningun prefijo conocido coincidio. Reportar el error sin tomar accion.
@@ -474,6 +561,9 @@ void setup() {
     motor_init();     // Fase 6a: configura Puerto G bits 0-3 como salidas para las bobinas
     temp_init();      // Fase 6b: configura ADC (canal 9, AVCC), pines calefactor PK3 y ventilador PK4
     dimmer_init();    // Fase 6c: configura Timer1 Fast PWM en OC1A (PB5/D11)
+    horno_init();      // Fase 7a: LED horno en PE5 (pin 3)
+    sonido_init();     // Fase 7b: Timer3 PWM volumen (PE3/pin5) + LED PH6 (pin9)
+    mercado_init();     // Fase 7c: lista de mercado en EEPROM (sin hardware)
 
     // sei(): habilita las interrupciones globales poniendo el bit I del SREG en 1.
     // DEBE ir DESPUES de todos los init() porque:
@@ -496,7 +586,8 @@ void setup() {
     // Enviar el menu de comandos disponibles a la terminal al encender
     usart_enviar_string("Comandos: ARM / DISARM:xxxx / LUZ:0-10 / GARAJE:ABRIR / GARAJE:CERRAR");
     usart_enviar_newline();
-
+    usart_enviar_string("HORNO:temp,min / SONIDO:ON,vol / SONIDO:OFF / MERCADO:ADD,nom,cant / MERCADO:DEL,nom / MERCADO:LIST");
+    usart_enviar_newline();
     pos_codigo = 0; // asegurar que el buffer del codigo empiece vacio (redundante pero explicito)
 }
 
@@ -618,5 +709,13 @@ void loop() {
         // (aunque temp_controlar() hace su propia llamada interna — es redundante
         //  pero claro: cada modulo es responsable de su propia lectura).
         temp_controlar();
+    }
+     // -- Horno (Fase 7a) --------------------------------------------------
+    if (horno_actualizar()) {
+        // El horno acaba de terminar su cuenta regresiva en esta vuelta
+        lcd_goto(0, 0);
+        lcd_string("HORNO: LISTO    ");
+        usart_enviar_string("HORNO:FIN");
+        usart_enviar_newline();
     }
 }

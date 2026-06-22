@@ -30,25 +30,22 @@ static volatile uint8_t rx_tail = 0;  // indice de lectura  (loop)
 // Se dispara automaticamente cuando llega un byte completo por RX0.
 // REGLA DEL PROYECTO: ISR minima -> solo depositar en buffer.
 // NO llama a lcd_string(), NO procesa el comando aqui.
+// En usart.cpp, dentro de ISR(USART0_RX_vect):
 ISR(USART0_RX_vect) {
 
-    // Leer el byte recibido desde el registro de datos USART0.
-    // UDR0 debe leerse SIEMPRE en la ISR, incluso si no se usa,
-    // para limpiar el flag de recepcion y evitar ISR repetidas.
     uint8_t byte_recibido = UDR0;
 
-    // Calcular la proxima posicion de escritura
-    // & USART_RX_BUF_MASK -> wrap-around circular sin if ni modulo
+    // NUEVO: eco inmediato del caracter recibido
+    // Espera que UDR0 este libre antes de escribir el eco
+    while (!(UCSR0A & (1 << UDRE0)));
+    UDR0 = byte_recibido;
+
     uint8_t next_head = (rx_head + 1) & USART_RX_BUF_MASK;
 
-    // Solo guardar si el buffer no esta lleno
-    // Si next_head == rx_tail el buffer esta lleno -> descartar
-    // (mejor descartar que sobreescribir datos no leidos)
     if (next_head != rx_tail) {
-        rx_buf[rx_head] = byte_recibido; // depositar byte en el buffer
-        rx_head = next_head;              // avanzar el indice de escritura
+        rx_buf[rx_head] = byte_recibido;
+        rx_head = next_head;
     }
-    // La ISR retorna - el hardware restaura el contexto del programa
 }
 
 
