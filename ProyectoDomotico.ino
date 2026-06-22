@@ -247,9 +247,11 @@ static void procesar_tecla_alarma(char tecla) {
         // Mostrar el nivel de luz en la mitad DERECHA de la linea 1 (columnas 9-15).
         // lcd_goto(1, 9): linea 1, columna 9 — no pisa la temperatura en columnas 0-8.
         lcd_goto(1, 9);
-        lcd_string("L:");        // prefijo corto que cabe en el espacio disponible (7 cols)
-        lcd_int(dimmer_get());   // valor actual: 0-10 (1 o 2 digitos)
-        lcd_string("/10");       // denominador fijo para indicar la escala
+        lcd_string("       ");   // 7 espacios: borra TODO lo que había antes en esa zona
+        lcd_goto(1, 9);           // volver al inicio de esa zona
+        lcd_string("L:");
+        lcd_int(dimmer_get());
+        lcd_string("/10");     // denominador fijo para indicar la escala
 
         // Reportar el cambio por serial para que la aplicacion remota sepa el nuevo nivel
         usart_enviar_string("LUZ:");
@@ -271,7 +273,9 @@ static void procesar_tecla_alarma(char tecla) {
         // el cast es seguro y dimmer_set() espera uint8_t.
         dimmer_set((uint8_t)nuevo_nivel);
 
-        lcd_goto(1, 9);   // mitad derecha de linea 1, igual que en tecla C
+        lcd_goto(1, 9);
+        lcd_string("       ");   // 7 espacios: borra TODO lo que había antes en esa zona
+        lcd_goto(1, 9);           // volver al inicio de esa zona
         lcd_string("L:");
         lcd_int(dimmer_get());
         lcd_string("/10");
