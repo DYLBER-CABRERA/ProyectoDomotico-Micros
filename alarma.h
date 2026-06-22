@@ -31,6 +31,13 @@
 #define ALARMA_TIPO_NINGUNO   0
 #define ALARMA_TIPO_INCENDIO  1
 #define ALARMA_TIPO_ACCESO    2
+#define ALARMA_TIPO_INTRUSO   3   // codigo equivocado repetidas veces
+
+// -- Anti-intrusos: intentos de codigo fallidos antes de disparar ------
+// Si alguien teclea mal el codigo (al armar o desarmar) este numero de
+// veces seguidas, se interpreta como intento de intrusion y se dispara
+// la alarma. Un codigo correcto reinicia el contador.
+#define ALARMA_MAX_INTENTOS   3
 
 // -- Pines de los LEDs indicadores (Puerto B) --------------------------
 #define LED_DISPARADA   PB7   // rojo, pin 13
@@ -71,5 +78,18 @@ uint8_t alarma_tipo_disparo();
 // (la comparacion del codigo en si se hace aqui para mantener
 //  la logica de seguridad encapsulada en este modulo)
 uint8_t alarma_verificar_codigo(const char* codigo_ingresado);
+
+// Registra un intento de codigo FALLIDO. Incrementa el contador interno;
+// cuando alcanza ALARMA_MAX_INTENTOS dispara la alarma de intruso (LED rojo
+// encendido, estado DISPARADA, tipo ALARMA_TIPO_INTRUSO) y reinicia el
+// contador. Retorna 1 si este fallo provoco el disparo, 0 si aun no.
+uint8_t alarma_registrar_fallo();
+
+// Reinicia el contador de intentos fallidos. Llamar cuando el codigo es
+// correcto (armado/desarmado exitoso) para empezar de cero.
+void alarma_reset_intentos();
+
+// Retorna cuantos intentos quedan antes de disparar la alarma de intruso.
+uint8_t alarma_intentos_restantes();
 
 #endif

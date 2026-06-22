@@ -1,53 +1,30 @@
 // temperatura.cpp - Lectura ADC + control calefactor/ventilador
 // Sin librerias - registros directos ATmega2560
-// Version con ADC8 (Puerto K) para comparar contra ADC2 (Puerto F)
+// Canal ADC9 (PK1 / pin A9). Conectar el potenciometro a A9 (NO A8).
 
 #include <avr/io.h>
-#include <util/delay.h>
 #include "temperatura.h"
+#include "adc.h"   // ADC compartido (el potenciometro de temperatura esta en ADC9)
 
 
 // -- temp_init() -----------------------------------------------------------
+// El ADC ahora lo configura adc_init() (en setup) porque es compartido con el
+// potenciometro de volumen. Aqui solo se configuran los pines de los actuadores.
 void temp_init() {
 
-    // ADMUX: ADC Multiplexer Selection Register
-    // REFS0=1 -> referencia AVCC (5V)
-    // MUX[3:0] = 0000 -> junto con MUX5=1 en ADCSRB, selecciona ADC8
-    ADMUX = (1 << REFS0) | 0x01;
-
-    // ADCSRB: MUX5=1 -> necesario para acceder a canales 8-15 (Puerto K)
-    ADCSRB = (1 << MUX5);
-
-    // ADCSRA: habilitar ADC, prescaler 128
-    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
-
-    // Descartar la primera conversion (puede ser no confiable)
-    ADCSRA |= (1 << ADSC);
-    while (ADCSRA & (1 << ADSC));
-    (void)ADC;
-
-    _delay_ms(2);
-
-    // Pines de calefactor y ventilador como salidas (Puerto K)
+    // Pines de calefactor y ventilador como salidas DIGITALES (Puerto K).
+    // Son salidas on/off puras: el LED enciende o apaga, sin variar el brillo.
     DDRK |= (1 << TEMP_PIN_CALEFACTOR) | (1 << TEMP_PIN_VENTILADOR);
     PORTK &= ~((1 << TEMP_PIN_CALEFACTOR) | (1 << TEMP_PIN_VENTILADOR));
 }
 
 
 // -- temp_leer_adc() ---------------------------------------------------------
-// Promedia 8 lecturas para estabilizar el resultado
+// Lee el canal ADC9 (potenciometro de temperatura) mediante el modulo ADC
+// compartido, que promedia 16 muestras y descarta la primera tras conmutar
+// de canal -> lectura estable, sin parpadeo de los LEDs.
 uint16_t temp_leer_adc() {
-
-    uint32_t suma = 0;
-    const uint8_t NUM_LECTURAS = 8;
-
-    for (uint8_t i = 0; i < NUM_LECTURAS; i++) {
-        ADCSRA |= (1 << ADSC);
-        while (ADCSRA & (1 << ADSC));
-        suma += ADC;
-    }
-
-    return (uint16_t)(suma / NUM_LECTURAS);
+    return adc_leer(9);
 }
 
 

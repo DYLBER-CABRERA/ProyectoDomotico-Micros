@@ -22,8 +22,17 @@
 #define DIMMER_DDR    DDRB
 #define DIMMER_PIN    PB5    // OC1A, pin 11
 
-// Rango util del dimmer (ajustado por limitacion visual de Proteus)
+// Rango util del dimmer (escala de usuario)
 #define DIMMER_NIVEL_MAX  10
+
+// -- CURVA DE BRILLO LOGARITMICA/PERCEPTUAL -----------------------------
+// El ojo percibe el brillo de forma logaritmica (ley de Weber-Fechner): un
+// mapeo LINEAL (OCR1A = nivel*k) se ve casi todo el cambio al inicio y nada
+// al final. Para que cada nivel represente un paso de brillo PARECIDO al
+// anterior, el duty cycle debe crecer de forma exponencial (curva gamma).
+// Se usa una tabla de 11 valores (niveles 0-10 -> OCR1A 0-255) en dimmer.cpp.
+// Cubre todo el rango: util tanto en Proteus (pasos finos abajo) como en el
+// entrenador fisico (llega al 100% de brillo).
 
 // -- API publica --------------------------------------------------------
 

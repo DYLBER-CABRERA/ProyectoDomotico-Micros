@@ -4,6 +4,7 @@
 
 #include <avr/io.h>
 #include "sonido.h"
+#include "adc.h"   // lectura del potenciometro de volumen (ADC13 / PK5 / A13)
 
 
 static uint8_t estado_sonido   = SONIDO_APAGADO;
@@ -40,24 +41,40 @@ void sonido_init() {
 }
 
 
-// -- sonido_encender(volumen) -----------------------------------------------------------
-void sonido_encender(uint8_t volumen) {
+// -- sonido_encender() -----------------------------------------------------------
+// Enciende el equipo. El volumen NO se fija aqui: lo controla el potenciometro
+// en tiempo real (ver sonido_actualizar()). El parametro se ignora.
+void sonido_encender(uint8_t volumen_ignorado) {
 
-    // Limitar el volumen al rango valido 0-100
-    if (volumen > 100) volumen = 100;
-
-    volumen_actual = volumen;
+    (void)volumen_ignorado; // el volumen lo decide el potenciometro (ADC0)
 
     // Encender el LED indicador (equipo encendido)
     PORTH |= (1 << SONIDO_LED_PIN);
 
-    // Convertir porcentaje (0-100) a valor de registro OCR3A (0-255)
-    // uint16_t evita overflow durante la multiplicacion (100*255=25500)
-    uint16_t valor_ocr = ((uint16_t)volumen * 255) / 100;
-
-    OCR3A = (uint8_t)valor_ocr;
-
     estado_sonido = SONIDO_ENCENDIDO;
+
+    // Aplicar de inmediato el volumen actual del potenciometro
+    sonido_actualizar();
+}
+
+
+// -- sonido_actualizar() -----------------------------------------------------------
+// Llamar en cada vuelta del loop(). Si el equipo esta encendido, lee el
+// potenciometro de volumen (ADC13 / PK5 / A13, 0-1023) y lo traduce a:
+//   - volumen_actual: porcentaje 0-100 (para reportes)
+//   - OCR3A:          duty 0-255 del PWM -> tras el filtro RC, la senal
+//                     analogica proporcional al volumen que exige el enunciado.
+void sonido_actualizar() {
+
+    if (estado_sonido != SONIDO_ENCENDIDO) return; // apagado: nada que hacer
+
+    uint16_t lectura = adc_leer(SONIDO_POT_CANAL); // 0-1023 del potenciometro
+
+    // Porcentaje 0-100 para reportar por serial/LCD
+    volumen_actual = (uint8_t)(((uint32_t)lectura * 100) / 1023);
+
+    // Duty 0-255 directamente proporcional a la lectura (1023 -> 255)
+    OCR3A = (uint8_t)(((uint32_t)lectura * 255) / 1023);
 }
 
 

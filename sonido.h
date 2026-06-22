@@ -10,10 +10,15 @@
 // asi lo exige el enunciado: "senal analogica proporcional al volumen".
 //
 // CONEXION FISICA:
-//   PWM volumen     -> OC3A -> PE3 (pin 5)  [+ filtro RC en el circuito]
+//   Pot. volumen    -> ADC13 (PK5 / A13)    [entrada analogica del usuario]
+//   PWM volumen     -> OC3A -> PE3 (pin 5)  [+ filtro RC -> senal analogica de salida]
 //   LED equipo ON   -> PH6 (pin 9) + R220 a GND
 //
-// COMANDOS: SONIDO:ON,<0-100>  /  SONIDO:OFF
+// El VOLUMEN lo fija el potenciometro en A13 en tiempo real mientras el equipo
+// esta encendido (ver sonido_actualizar()). El encendido/apagado es por comando
+// (teclado *21/*20 o serial SONIDO:ON / SONIDO:OFF).
+//
+// COMANDOS: SONIDO:ON  /  SONIDO:OFF   (el volumen ya no se pasa por comando)
 
 #include <avr/io.h>
 
@@ -22,6 +27,8 @@
 
 #define SONIDO_PWM_DDR   DDRE
 #define SONIDO_PWM_PIN   PE3   // pin 5, OC3A (Timer3 canal A)
+
+#define SONIDO_POT_CANAL 13    // ADC13 (PK5 / A13): potenciometro de volumen
 
 // Estados
 #define SONIDO_APAGADO   0
@@ -33,9 +40,14 @@
 // Llamar en setup().
 void sonido_init();
 
-// Enciende el equipo de sonido con el volumen indicado (0-100).
-// Enciende el LED indicador y ajusta el duty cycle del PWM.
-void sonido_encender(uint8_t volumen);
+// Enciende el equipo de sonido. Enciende el LED indicador; a partir de aqui
+// el volumen lo controla el potenciometro (ver sonido_actualizar()).
+// El parametro se mantiene por compatibilidad pero se ignora (el pot manda).
+void sonido_encender(uint8_t volumen_ignorado);
+
+// Debe llamarse en cada vuelta del loop(). Si el equipo esta encendido, lee el
+// potenciometro de volumen (ADC0) y actualiza el PWM en tiempo real.
+void sonido_actualizar();
 
 // Apaga el equipo: apaga el LED y pone el PWM en 0 (silencio)
 void sonido_apagar();

@@ -52,4 +52,11 @@ void mercado_listar();
 // Retorna la cantidad de productos actualmente guardados (no vacios)
 uint8_t mercado_contar();
 
+// Lee el producto guardado en el slot 'indice' (0..MERCADO_MAX_ITEMS-1).
+// Si el slot esta ocupado: copia el nombre en 'nombre' (buffer de al menos
+// MERCADO_NOMBRE_LEN+1 bytes), escribe la cantidad en *cantidad y retorna 1.
+// Si el slot esta vacio o el indice es invalido, retorna 0.
+// Util para mostrar la lista en el LCD (entrenador sin terminal serial).
+uint8_t mercado_leer_indice(uint8_t indice, char* nombre, uint8_t* cantidad);
+
 #endif

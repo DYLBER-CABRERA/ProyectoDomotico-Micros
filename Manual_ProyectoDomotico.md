@@ -1,5 +1,12 @@
 # Manual del Sistema Domótico — ATmega2560 (Arduino Mega 2560)
-## Fases Activas: 1 (LCD) · 2 (Teclado) · 3 (USART) · 5 (Alarma) · 6 (Motor + Temperatura + Dimmer)
+## Fases Activas: 1 (LCD) · 2 (Teclado) · 3 (USART) · 5 (Alarma) · 6 (Servo + Temperatura + Dimmer) · 7 (Horno + Sonido + Mercado)
+
+> ⚠️ **Cambios recientes** — el mapa de pines de algunas secciones de este manual cambió.
+> El **mapeo de pines vigente está en [`MAPEO_PINES.md`](MAPEO_PINES.md)**. Resumen:
+> el **garaje ahora es un servomotor** en **D6/PH3** (ya no motor paso a paso; PG0–PG3
+> libres); el **volumen del sonido se controla con un potenciómetro en A0**; el dimmer usa
+> una **curva logarítmica**; y los comandos del entrenador se hacen por teclado
+> (ver [`COMANDOS_TECLADO.md`](COMANDOS_TECLADO.md)).
 
 ---
 
@@ -113,7 +120,7 @@ Enviar el comando terminado en `\n` (Enter). El sistema responde por la misma te
 
 | Comando | Acción | Respuesta OK | Respuesta ERROR |
 |---------|--------|-------------|----------------|
-| `ARM` | Arma la alarma de acceso | `OK:ARMADA` | — |
+| `ARM:1234` | Arma la alarma de acceso (requiere código) | `OK:ARMADA` | `ERROR:CODIGO` |
 | `DISARM:1234` | Desarma la alarma con código | `OK:DESACTIVADA` | `ERROR:CODIGO` |
 | `LUZ:0` … `LUZ:10` | Ajusta el dimmer (0=apagado, 10=máx) | `OK:LUZ,N` | — |
 | `GARAJE:ABRIR` | Gira el motor PAP en sentido horario | `OK:GARAJE_ABRIENDO` → `OK:GARAJE_ABIERTO` | — |
@@ -352,9 +359,9 @@ La señal PWM sale del Timer1 directamente al pin D11. No requiere lógica exter
 1. Abrir la Virtual Terminal en Proteus (doble clic sobre ella en la simulación).
 2. Al iniciar la simulación, debe aparecer:
    ```
-   Comandos: ARM / DISARM:xxxx / LUZ:0-10 / GARAJE:ABRIR / GARAJE:CERRAR
+   Comandos: ARM:xxxx / DISARM:xxxx / LUZ:0-10 / GARAJE:ABRIR / GARAJE:CERRAR
    ```
-3. Escribir `ARM` + Enter en la terminal → respuesta: `OK:ARMADA`, LCD línea 0: `ALARMA: ARMADA`.
+3. Escribir `ARM:1234` + Enter en la terminal → respuesta: `OK:ARMADA`, LCD línea 0: `ALARMA: ARMADA`. (Con código errado responde `ERROR:CODIGO`.)
 4. Escribir `DISARM:1234` + Enter → respuesta: `OK:DESACTIVADA`.
 5. Escribir `LUZ:5` + Enter → respuesta: `OK:LUZ,5`, LCD línea 1: `Luz: 5/10`.
 6. Escribir `disarm:1234` (minúsculas) + Enter → mismo resultado que en mayúsculas (la función `a_mayusculas` lo convierte).
@@ -368,7 +375,7 @@ La señal PWM sale del Timer1 directamente al pin D11. No requiere lógica exter
 **Objetivo**: verificar el ciclo arm → sensor → disparo → desarm.
 
 **Pasos**:
-1. Enviar `ARM` por la terminal serial.
+1. Enviar `ARM:1234` por la terminal serial.
 2. LCD línea 0 muestra `ALARMA: ARMADA`. LED verde (D12/PB6) enciende.
 3. Activar el DIP-SW1 (SW1 → D19/INT2) — simula apertura de puerta.
 4. LCD línea 0 muestra `!! INTRUSION !!`. LED rojo (D13/PB7) enciende.
@@ -380,6 +387,14 @@ La señal PWM sale del Timer1 directamente al pin D11. No requiere lógica exter
 2. Presionar `A` (armar).
 3. LCD muestra `CODIGO INCORRECTO`. Terminal muestra `ERROR:CODIGO`.
 
+**Prueba anti-intrusos (código equivocado repetido)**:
+1. Teclear un código incorrecto y presionar `A` (o `B`) — 1er fallo: `CODIGO INCORRECTO`.
+2. Repetir — 2º fallo: `CODIGO INCORRECTO`.
+3. Repetir una 3ª vez — al alcanzar 3 intentos, la alarma se **dispara**: LCD
+   `!! INTRUSO !!`, LED rojo (D13/PB7) encendido, terminal `ALARMA:INTRUSO`.
+4. Para silenciar: ingresar el código **correcto** `1234` y `B` (o `DISARM:1234`).
+   (El umbral de 3 intentos se ajusta en `ALARMA_MAX_INTENTOS` de `alarma.h`.)
+
 ---
 
 ### Prueba 5 — Alarma de Incendio
@@ -387,7 +402,7 @@ La señal PWM sale del Timer1 directamente al pin D11. No requiere lógica exter
 **Objetivo**: verificar que la alarma de incendio se dispara independientemente del estado de la alarma de acceso.
 
 **Pasos**:
-1. NO enviar `ARM` (alarma de acceso desactivada).
+1. NO enviar `ARM:1234` (alarma de acceso desactivada).
 2. Activar el DIP-SW2 posición 1 (SW3 → D2/INT4) — simula sensor de humo.
 3. LCD línea 0 muestra `!! INCENDIO !!`. LED rojo enciende.
 4. Terminal muestra `ALARMA:INCENDIO`.
@@ -506,7 +521,7 @@ La señal PWM sale del Timer1 directamente al pin D11. No requiere lógica exter
 | LCD no muestra nada | Pines PA0-PA7 incorrectos o contraste V0 | Verificar conexiones y ajustar V0 |
 | Teclado no responde | Timer2 no inicializado o pines PL/PC invertidos | Verificar `teclado_init()` fue llamado antes de `sei()` |
 | Terminal serial vacía | TX/RX no cruzados o baud rate distinto | Cruzar cables y confirmar 9600 bps |
-| Alarma de acceso nunca dispara | La alarma no fue ARMADA primero | Enviar `ARM` antes de activar el switch |
+| Alarma de acceso nunca dispara | La alarma no fue ARMADA primero | Enviar `ARM:1234` antes de activar el switch |
 | Alarma de incendio nunca dispara | INT4/INT5 no habilitadas | Revisar que `alarma_init()` es llamado |
 | Motor no gira | Secuencia de pines PG0-PG3 incorrecta | Verificar orden de bobinas con el motor específico |
 | Temperatura siempre 0°C | Pot conectado a A8 en lugar de A9 | Mover conexión a A9 (PK1) |

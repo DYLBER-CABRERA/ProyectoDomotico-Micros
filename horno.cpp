@@ -20,11 +20,13 @@ static uint16_t contador_segundo = 0;
 // -- horno_init() -----------------------------------------------------------
 void horno_init() {
 
-    // Configurar PE5 como salida
-    DDRE |= (1 << HORNO_PIN);
+    // Configurar PH5 como salida (usar las macros del header, NO DDRE/PORTE).
+    // PE5 esta ocupado por el sensor de incendio SW4/INT5: escribirlo aqui
+    // rompia la alarma de incendio zona 2 (ver specs/defects/DEF-001).
+    HORNO_DDR |= (1 << HORNO_PIN);
 
     // Apagar el LED al inicio
-    PORTE &= ~(1 << HORNO_PIN);
+    HORNO_PORT &= ~(1 << HORNO_PIN);
 
     estado_horno       = HORNO_APAGADO;
     temp_objetivo       = 0;
@@ -43,7 +45,7 @@ void horno_encender(uint8_t temp, uint8_t minutos) {
     segundos_restantes = (uint16_t)minutos * 60;
 
     // Encender el LED (simula activar el rele del horno)
-    PORTE |= (1 << HORNO_PIN);
+    HORNO_PORT |= (1 << HORNO_PIN);
 
     estado_horno    = HORNO_ENCENDIDO;
     contador_segundo = 0; // reiniciar el contador de tiempo
@@ -53,7 +55,7 @@ void horno_encender(uint8_t temp, uint8_t minutos) {
 // -- horno_apagar() -----------------------------------------------------------
 void horno_apagar() {
 
-    PORTE &= ~(1 << HORNO_PIN);
+    HORNO_PORT &= ~(1 << HORNO_PIN);
 
     estado_horno       = HORNO_APAGADO;
     segundos_restantes = 0;

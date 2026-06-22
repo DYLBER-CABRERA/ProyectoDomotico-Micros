@@ -14,6 +14,16 @@ static uint16_t direccion_slot(uint8_t indice) {
 }
 
 
+// -- Funcion interna: saber si un slot esta LIBRE -----------------------
+// Una EEPROM en blanco (nunca escrita) vale 0xFF, no 0x00. Antes el codigo
+// solo consideraba libre el slot con primer byte 0x00, por lo que en una
+// EEPROM virgen NINGUN slot parecia libre y el mercado salia "lleno" siempre.
+// Aqui se considera libre tanto 0x00 (borrado) como 0xFF (nunca escrito).
+static uint8_t slot_libre(uint8_t primer_byte) {
+    return (primer_byte == 0x00 || primer_byte == 0xFF);
+}
+
+
 // -- mercado_init() -----------------------------------------------------------
 void mercado_init() {
     // La EEPROM ya esta lista desde el arranque -- sin configuracion
@@ -52,7 +62,7 @@ uint8_t mercado_agregar(const char* nombre, uint8_t cantidad) {
 
         uint8_t primer_byte = eeprom_read_byte((const uint8_t*)dir);
 
-        if (primer_byte == MERCADO_SLOT_VACIO) {
+        if (slot_libre(primer_byte)) {
 
             // Escribir el nombre, caracter por caracter, hasta
             // MERCADO_NOMBRE_LEN caracteres o hasta el '\0' del string
@@ -98,7 +108,7 @@ uint8_t mercado_eliminar(const char* nombre) {
             // ya vacio (evita un ciclo de escritura redundante)
             uint8_t primer_byte = eeprom_read_byte((const uint8_t*)dir);
 
-            if (primer_byte != MERCADO_SLOT_VACIO) {
+            if (!slot_libre(primer_byte)) {
                 // Marcar el slot como vacio escribiendo 0x00 en el
                 // primer byte (suficiente para considerarlo libre,
                 // no es necesario borrar todo el registro)
@@ -132,7 +142,7 @@ void mercado_listar() {
 
         uint8_t primer_byte = eeprom_read_byte((const uint8_t*)dir);
 
-        if (primer_byte != MERCADO_SLOT_VACIO) {
+        if (!slot_libre(primer_byte)) {
 
             // Leer el nombre completo
             for (uint8_t b = 0; b <= MERCADO_NOMBRE_LEN; b++) {
@@ -169,10 +179,34 @@ uint8_t mercado_contar() {
         uint16_t dir = direccion_slot(i);
         uint8_t primer_byte = eeprom_read_byte((const uint8_t*)dir);
 
-        if (primer_byte != MERCADO_SLOT_VACIO) {
+        if (!slot_libre(primer_byte)) {
             total++;
         }
     }
 
     return total;
+}
+
+
+// -- mercado_leer_indice(indice, nombre, cantidad) ---------------------------
+// Lee un slot por indice para mostrarlo en el LCD (sin depender del serial).
+uint8_t mercado_leer_indice(uint8_t indice, char* nombre, uint8_t* cantidad) {
+
+    if (indice >= MERCADO_MAX_ITEMS) return 0;
+
+    uint16_t dir = direccion_slot(indice);
+
+    // Slot vacio: nada que leer (0x00 borrado o 0xFF nunca escrito)
+    if (slot_libre(eeprom_read_byte((const uint8_t*)dir))) return 0;
+
+    // Copiar el nombre completo (incluye el '\0' del campo)
+    for (uint8_t b = 0; b <= MERCADO_NOMBRE_LEN; b++) {
+        nombre[b] = (char)eeprom_read_byte((const uint8_t*)(dir + b));
+    }
+    nombre[MERCADO_NOMBRE_LEN] = '\0'; // garantizar terminador
+
+    // Leer la cantidad (ultimo byte del registro)
+    *cantidad = eeprom_read_byte((const uint8_t*)(dir + MERCADO_NOMBRE_LEN + 1));
+
+    return 1;
 }

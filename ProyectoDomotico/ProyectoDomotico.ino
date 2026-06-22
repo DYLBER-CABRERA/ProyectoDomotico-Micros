@@ -31,8 +31,7 @@
 #include "teclado.h"     // teclado_init, teclado_hay, teclado_leer
 #include "usart.h"       // usart_init, usart_enviar_*, usart_hay_linea, usart_leer_linea
 #include "alarma.h"      // alarma_init/armar/desarmar/actualizar, ALARMA_TIPO_*, ALARMA_CODIGO_LEN
-#include "adc.h"         // adc_init, adc_leer (ADC compartido: temperatura y volumen)
-#include "motor.h"       // motor_init, garaje_abrir, garaje_cerrar (servo)
+#include "motor.h"       // motor_init, garaje_abrir, garaje_cerrar
 #include "temperatura.h" // temp_init, temp_celsius, temp_controlar
 #include "dimmer.h"      // dimmer_init, dimmer_set, dimmer_get, DIMMER_NIVEL_MAX
 #include "horno.h"
@@ -147,33 +146,6 @@ static void a_mayusculas(char* s) {
         s++;
     }
     // Al salir del while, s apunta al '\0'. El string original quedo modificado.
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// reportar_codigo_incorrecto()
-// Maneja de forma centralizada un intento de codigo EQUIVOCADO (al armar o
-// desarmar, por teclado o serial). Cuenta el fallo en el modulo de alarma:
-//   - Si aun no se alcanza el umbral (ALARMA_MAX_INTENTOS): muestra
-//     "CODIGO INCORRECTO" y responde "ERROR:CODIGO".
-//   - Si este fallo alcanza el umbral: alarma_registrar_fallo() dispara la
-//     alarma de INTRUSO (LED rojo) y aqui se muestra "!! INTRUSO !!" y se
-//     envia "ALARMA:INTRUSO" por serial.
-// NO emite el newline final: lo agrega el llamador (igual que en los bloques OK).
-// ─────────────────────────────────────────────────────────────────────────────
-static void reportar_codigo_incorrecto() {
-
-    if (alarma_registrar_fallo()) {
-        // Se alcanzo el numero maximo de intentos -> intento de intrusion
-        lcd_goto(0, 0);
-        lcd_string("!! INTRUSO !!   ");
-        usart_enviar_string("ALARMA:INTRUSO");
-    } else {
-        // Aun quedan intentos: solo avisar del error de codigo
-        lcd_goto(0, 0);
-        lcd_string("CODIGO INCORRECTO");
-        usart_enviar_string("ERROR:CODIGO");
-    }
 }
 
 
@@ -295,13 +267,13 @@ static void procesar_tecla_alarma(char tecla) {
         // Si cualquiera de las dos falla, se muestra error — no se puede armar sin codigo completo.
         if (pos_codigo == ALARMA_CODIGO_LEN && alarma_verificar_codigo(buffer_codigo)) {
             alarma_armar();               // habilitar INT2/INT3 y encender LED verde
-            alarma_reset_intentos();      // codigo correcto: limpiar contador anti-intrusos
             lcd_goto(0, 0);              // ir a linea 0 (exclusiva del estado de alarma)
             lcd_string("ALARMA: ARMADA  "); // 16 caracteres exactos — llena la linea completa
             usart_enviar_string("OK:ARMADA"); // confirmar por serial
         } else {
-            // Codigo equivocado: contar el fallo (puede disparar la alarma de intruso)
-            reportar_codigo_incorrecto();
+            lcd_goto(0, 0);
+            lcd_string("CODIGO INCORRECTO"); // mensaje de error — 17 chars, desborda 1 (no critico en LCD)
+            usart_enviar_string("ERROR:CODIGO");
         }
         usart_enviar_newline(); // \r\n al final del mensaje serial (requerido por terminales Windows)
 
@@ -316,13 +288,13 @@ static void procesar_tecla_alarma(char tecla) {
         // Misma logica de validacion que tecla A: codigo completo Y correcto.
         if (pos_codigo == ALARMA_CODIGO_LEN && alarma_verificar_codigo(buffer_codigo)) {
             alarma_desarmar();            // deshabilitar INT2/INT3, apagar LEDs rojo y verde
-            alarma_reset_intentos();      // codigo correcto: limpiar contador anti-intrusos
             lcd_goto(0, 0);
             lcd_string("ALARMA: DESACTIV"); // 16 caracteres — llena la linea 0 completamente
             usart_enviar_string("OK:DESACTIVADA");
         } else {
-            // Codigo equivocado: contar el fallo (puede disparar la alarma de intruso)
-            reportar_codigo_incorrecto();
+            lcd_goto(0, 0);
+            lcd_string("CODIGO INCORRECTO");
+            usart_enviar_string("ERROR:CODIGO");
         }
         usart_enviar_newline();
 
@@ -457,13 +429,12 @@ static void procesar_comando_serial(char* comando) {
 
         if (alarma_verificar_codigo(codigo_recibido)) {
             alarma_armar();          // habilitar INT2/INT3 y encender LED verde (PB6)
-            alarma_reset_intentos(); // codigo correcto: limpiar contador anti-intrusos
             lcd_goto(0, 0);         // linea 0: exclusiva del estado de alarma
             lcd_string("ALARMA: ARMADA  "); // 16 chars exactos para llenar la linea
             usart_enviar_string("OK:ARMADA");
         } else {
-            // Codigo incorrecto: contar el fallo (puede disparar la alarma de intruso)
-            reportar_codigo_incorrecto();
+            // Codigo incorrecto: no se arma nada
+            usart_enviar_string("ERROR:CODIGO");
         }
         usart_enviar_newline(); // \r\n — necesario para que la terminal muestre nueva linea
 
@@ -481,13 +452,12 @@ static void procesar_comando_serial(char* comando) {
         // alarma_verificar_codigo() compara byte a byte contra el codigo guardado en Flash.
         if (alarma_verificar_codigo(codigo_recibido)) {
             alarma_desarmar();           // deshabilitar INT2/INT3, apagar LEDs rojo y verde
-            alarma_reset_intentos();     // codigo correcto: limpiar contador anti-intrusos
             lcd_goto(0, 0);
             lcd_string("ALARMA: DESACTIV"); // 16 chars — llena la linea 0
             usart_enviar_string("OK:DESACTIVADA");
         } else {
-            // Codigo incorrecto: contar el fallo (puede disparar la alarma de intruso)
-            reportar_codigo_incorrecto();
+            // Codigo incorrecto: no se ejecuta ninguna accion sobre la alarma
+            usart_enviar_string("ERROR:CODIGO");
         }
         usart_enviar_newline();
 
@@ -586,22 +556,22 @@ static void procesar_comando_serial(char* comando) {
         usart_enviar_int(minutos);
         usart_enviar_newline();
 
+    } else if (strncmp(comando, "SONIDO:ON,", 10) == 0) {
+
+        // Formato: SONIDO:ON,<volumen>  ej. "SONIDO:ON,75"
+        uint8_t volumen = texto_a_numero(comando + 10);
+
+        sonido_encender(volumen);
+
+        usart_enviar_string("OK:SONIDO_ON,");
+        usart_enviar_int(volumen);
+        usart_enviar_newline();
+
     } else if (strncmp(comando, "SONIDO:OFF", 10) == 0) {
 
         sonido_apagar();
 
         usart_enviar_string("OK:SONIDO_OFF");
-        usart_enviar_newline();
-
-    } else if (strncmp(comando, "SONIDO:ON", 9) == 0) {
-
-        // El equipo se enciende por comando, pero el VOLUMEN lo fija el
-        // potenciometro (A0) en tiempo real. Se acepta "SONIDO:ON" o
-        // "SONIDO:ON,xx" (el numero, si viene, se ignora).
-        sonido_encender(0);
-
-        usart_enviar_string("OK:SONIDO_ON,");
-        usart_enviar_int(sonido_volumen()); // volumen real leido del potenciometro
         usart_enviar_newline();
 
     } else if (strncmp(comando, "MERCADO:ADD,", 12) == 0) {
@@ -680,11 +650,58 @@ static const char* producto_por_codigo(uint8_t cod) {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// (mostrar_mercado_lcd ELIMINADA) — el listado del mercado ahora va por la
-// terminal serial de forma NO bloqueante (ver case 59 en ejecutar_comando_teclado).
-// Se quito porque su version con _delay_ms congelaba todo el sistema mientras
-// listaba (no respondian teclado ni alarmas) — justo el bug reportado.
+// mostrar_mercado_lcd()
+// Recorre la lista del mercado y la muestra en el LCD, un producto a la vez
+// (~1.2 s cada uno). BLOQUEANTE como el motor del garaje: las ISR de alarma
+// siguen activas. Pensado para el entrenador, que no tiene terminal serial.
 // ─────────────────────────────────────────────────────────────────────────────
+static void mostrar_mercado_lcd() {
+
+    char    nombre[MERCADO_NOMBRE_LEN + 1];
+    uint8_t cantidad;
+    uint8_t mostrados = 0;
+
+    lcd_clear();
+    lcd_goto(0, 0);
+    lcd_string("MERCADO: ");
+    lcd_int(mercado_contar());
+    lcd_string(" item");
+    _delay_ms(1000);
+
+    for (uint8_t i = 0; i < MERCADO_MAX_ITEMS; i++) {
+        if (mercado_leer_indice(i, nombre, &cantidad)) {
+            lcd_clear();
+            lcd_goto(0, 0);
+            lcd_string(nombre);          // nombre del producto en la linea 0
+            lcd_goto(1, 0);
+            lcd_string("Cant: ");
+            lcd_int(cantidad);            // cantidad en la linea 1
+            _delay_ms(1200);
+            mostrados++;
+        }
+    }
+
+    if (mostrados == 0) {
+        lcd_clear();
+        lcd_goto(0, 0);
+        lcd_string("MERCADO VACIO");
+        _delay_ms(1000);
+    }
+
+    // Restaurar la pantalla base (estado de alarma + temp/luz)
+    lcd_clear();
+    lcd_goto(0, 0);
+    uint8_t e = alarma_estado();
+    lcd_string("ALARMA: ");
+    lcd_string(e == ALARMA_ARMADA ? "ARMADA  "
+             : (e == ALARMA_DISPARADA ? "DISPARADA" : "DESACTIV"));
+    lcd_goto(1, 0);
+    lcd_string("T:--C   L:");
+    lcd_int(dimmer_get());
+    lcd_string("/10");
+}
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ejecutar_comando_teclado(cmd)
 // Interpreta y ejecuta un comando capturado en modo teclado. Formato:
@@ -802,11 +819,8 @@ static void ejecutar_comando_teclado(char* cmd) {
             usart_enviar_newline();
             break;
         }
-        case 59: // listar el mercado por la TERMINAL (serial), NO bloqueante.
-            // En el LCD solo se muestra el conteo (rapido, sin _delay); la lista
-            // completa va a la Virtual Terminal por USART (mercado_listar()).
-            lcd_goto(0, 0); lcd_string("MERCADO: ");
-            lcd_int(mercado_contar()); lcd_string(" item ");
+        case 59: // listar en el LCD (y tambien por serial si hay terminal)
+            mostrar_mercado_lcd();
             usart_enviar_string("--- LISTA DE MERCADO ---"); usart_enviar_newline();
             mercado_listar();
             break;
@@ -815,22 +829,22 @@ static void ejecutar_comando_teclado(char* cmd) {
         case 91: // armar (args = codigo de 4 digitos, ej. *91 1234 #)
             if (alarma_verificar_codigo(args)) {
                 alarma_armar();
-                alarma_reset_intentos(); // codigo correcto: limpiar contador anti-intrusos
                 lcd_goto(0, 0); lcd_string("ALARMA: ARMADA  ");
                 usart_enviar_string("OK:ARMADA");
             } else {
-                reportar_codigo_incorrecto(); // cuenta el fallo (puede disparar intruso)
+                lcd_goto(0, 0); lcd_string("CODIGO INCORRECTO");
+                usart_enviar_string("ERROR:CODIGO");
             }
             usart_enviar_newline();
             break;
         case 90: // desarmar (args = codigo de 4 digitos)
             if (alarma_verificar_codigo(args)) {
                 alarma_desarmar();
-                alarma_reset_intentos(); // codigo correcto: limpiar contador anti-intrusos
                 lcd_goto(0, 0); lcd_string("ALARMA: DESACTIV");
                 usart_enviar_string("OK:DESACTIVADA");
             } else {
-                reportar_codigo_incorrecto(); // cuenta el fallo (puede disparar intruso)
+                lcd_goto(0, 0); lcd_string("CODIGO INCORRECTO");
+                usart_enviar_string("ERROR:CODIGO");
             }
             usart_enviar_newline();
             break;
@@ -857,12 +871,11 @@ void setup() {
     teclado_init();   // Fase 2: configura Puerto L (cols), Puerto C (filas) y Timer2 CTC
     usart_init();     // Fase 3: configura USART0 9600 bps 8N1 y habilita ISR de recepcion
     alarma_init();    // Fase 5: configura LEDs PB6/PB7, EICRA/EICRB, habilita INT4/INT5
-    adc_init();       // ADC compartido (AVCC, prescaler 128) — temp ADC9 (A9) + volumen ADC13 (A13)
-    motor_init();     // Fase 6a: SERVO del garaje, Timer4 PWM 50Hz en OC4A (PH3/D6)
-    temp_init();      // Fase 6b: pines calefactor PK3 (A11) y ventilador PK4 (A12)
+    motor_init();     // Fase 6a: configura Puerto G bits 0-3 como salidas para las bobinas
+    temp_init();      // Fase 6b: configura ADC (canal 9, AVCC), pines calefactor PK3 y ventilador PK4
     dimmer_init();    // Fase 6c: configura Timer1 Fast PWM en OC1A (PB5/D11)
     horno_init();      // Fase 7a: LED horno en PH5 (pin 8)
-    sonido_init();     // Fase 7b: Timer3 PWM volumen (PE3/D5)->RC + LED PH6 (D9); pot volumen en A13 (PK5)
+    sonido_init();     // Fase 7b: Timer3 PWM volumen (PE3/pin5) + LED PH6 (pin9)
     mercado_init();     // Fase 7c: lista de mercado en EEPROM (sin hardware)
 
     // sei(): habilita las interrupciones globales poniendo el bit I del SREG en 1.
@@ -886,7 +899,7 @@ void setup() {
     // Enviar el menu de comandos disponibles a la terminal al encender
     usart_enviar_string("Comandos: ARM:xxxx / DISARM:xxxx / LUZ:0-10 / GARAJE:ABRIR / GARAJE:CERRAR");
     usart_enviar_newline();
-    usart_enviar_string("HORNO:temp,min / SONIDO:ON (vol por pot A0) / SONIDO:OFF / MERCADO:ADD,nom,cant / MERCADO:DEL,nom / MERCADO:LIST");
+    usart_enviar_string("HORNO:temp,min / SONIDO:ON,vol / SONIDO:OFF / MERCADO:ADD,nom,cant / MERCADO:DEL,nom / MERCADO:LIST");
     usart_enviar_newline();
     pos_codigo = 0; // asegurar que el buffer del codigo empiece vacio (redundante pero explicito)
 }
@@ -971,11 +984,6 @@ void loop() {
         // Parsear y ejecutar el comando recibido
         procesar_comando_serial(comando);
     }
-
-    // ── 3b. VOLUMEN DEL EQUIPO DE SONIDO (Fase 7) ────────────────────────────
-    // Si el equipo esta encendido, lee el potenciometro (A13/PK5) y ajusta el
-    // volumen en tiempo real. No bloquea: solo lee el ADC y escribe el PWM.
-    sonido_actualizar();
 
     // ── 4. TEMPERATURA Y TEMPORIZADO (Fase 6) ────────────────────────────────
     // Incrementar los dos contadores en cada vuelta del loop.

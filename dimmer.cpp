@@ -54,22 +54,26 @@ void dimmer_set(uint8_t nivel) {
 
     nivel_actual = nivel; // guardar el nivel para que dimmer_get() lo pueda reportar
 
-    // FORMULA ORIGINAL (abarca 0%-100% del duty cycle, rango completo):
-    //   valor_ocr = (nivel * 255) / 10
-    //   nivel=5 → OCR1A=127 (50% duty) → en Proteus el LED ya se ve igual que al 10%
-    // Esta formula se calcula pero NO se asigna a OCR1A (se deja como referencia).
-    // La variable queda sin usar intencionalmente para documentar la formula original.
-    uint16_t valor_ocr = ((uint16_t)nivel * 255) / DIMMER_NIVEL_MAX; // referencia: NO se usa
+    // TABLA DE BRILLO PERCEPTUAL (curva logaritmica/gamma).
+    // El duty crece de forma ~exponencial para que el cambio de brillo se vea
+    // PAREJO entre niveles (el ojo percibe el brillo de forma logaritmica).
+    //   indice = nivel (0-10) -> valor de OCR1A (0-255 = 0%-100% de duty)
+    // Cada paso multiplica aprox. x1.7 el anterior. Ajustable a gusto.
+    static const uint8_t curva[DIMMER_NIVEL_MAX + 1] = {
+        0,    // 0  -> apagado
+        2,    // 1
+        4,    // 2
+        8,    // 3
+        14,   // 4
+        25,   // 5
+        44,   // 6
+        78,   // 7
+        124,  // 8
+        180,  // 9
+        255   // 10 -> brillo maximo
+    };
 
-    // FORMULA AJUSTADA PARA PROTEUS (rango visible 0% a ~7.8% duty):
-    //   OCR1A = nivel * 2
-    //   nivel=0  → OCR1A=0  → 0%   duty cycle → LED apagado
-    //   nivel=5  → OCR1A=10 → 3.9% duty cycle → brillo medio
-    //   nivel=10 → OCR1A=20 → 7.8% duty cycle → brillo maximo visible
-    // En Proteus el brillo del LED no cambia visiblemente por encima del 10%
-    // de duty cycle, por lo que comprimir el rango util a 0-20 en OCR1A
-    // hace que cada nivel represente un cambio visible real en la simulacion.
-    OCR1A = nivel * 2;
+    OCR1A = curva[nivel]; // aplicar el valor de la curva al duty cycle
 }
 
 

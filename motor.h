@@ -1,73 +1,56 @@
 #ifndef MOTOR_H
 #define MOTOR_H
 
-// motor.h - Driver motor paso a paso (PAP) para el garaje
+// motor.h - Servomotor del garaje (reemplaza al motor paso a paso)
 // Sin librerias - registros directos ATmega2560
 //
-// El motor PAP del entrenador tiene 4 bobinas. Se controla activando
-// las bobinas en secuencia (NO con PWM como un servo). Cada paso
-// completo de la secuencia gira el eje un angulo fijo (1.8 o 7.5
-// grados segun el motor, verificar en el entrenador).
+// El garaje ahora se controla con un SERVOMOTOR por PWM de 50 Hz (periodo
+// 20 ms), variando el ancho de pulso:
+//   ~1.0 ms  -> 0 grados   (garaje CERRADO)
+//   ~2.0 ms  -> 180 grados (garaje ABIERTO)
+//
+// A diferencia del paso a paso, NO es bloqueante: se fija el ancho de pulso y
+// el servo se mueve solo; el loop sigue corriendo (no se detienen el teclado,
+// las alarmas ni el mercado).
 //
 // CONEXION FISICA:
-//   IN1 -> PG0 (pin 41)
-//   IN2 -> PG1 (pin 40)
-//   IN3 -> PG2 (pin 39)
-//   IN4 -> PG3 (pin 38)
-//   (el driver del motor en el entrenador ya maneja la corriente,
-//    el Mega solo da las senales logicas de 5V)
+//   Senal servo -> OC4A -> PH3 (pin D6)
+//   - En PROTEUS: conectar la entrada del componente MOTOR-PWM / servo a D6.
+//   - En el ENTRENADOR: conectar un LED + R220 a GND en D6 (el LED varia su
+//     brillo segun la posicion: tenue = cerrado, mas brillante = abierto).
 //
-// VELOCIDAD: se controla con el delay entre cada paso. Mas delay
-// = mas lento pero con mas torque. Se usa Timer3 para el delay
-// entre pasos sin bloquear el resto del sistema con _delay_ms largos.
+// Timer4 (16 bits) en Fast PWM, TOP=ICR4. Timer4 estaba libre (Timer1=dimmer,
+// Timer2=teclado, Timer3=sonido).
 
 #include <avr/io.h>
 
-// -- Pines del motor (Puerto G) ----------------------------------------
-#define MOTOR_DDR    DDRG
-#define MOTOR_PORT   PORTG
-#define MOTOR_IN1    PG0   // pin 41
-#define MOTOR_IN2    PG1   // pin 40
-#define MOTOR_IN3    PG2   // pin 39
-#define MOTOR_IN4    PG3   // pin 38
+// -- Pin de la senal del servo (Puerto H, OC4A) ------------------------
+#define SERVO_DDR    DDRH
+#define SERVO_PIN    PH3   // OC4A, pin D6
 
-// -- Direcciones de giro -------------------------------------------------
-#define MOTOR_HORARIO      0   // abrir garaje
-#define MOTOR_ANTIHORARIO  1   // cerrar garaje
-
-// -- Cantidad de pasos para abrir/cerrar completamente el garaje --------
-// Ajustar este valor experimentalmente en el entrenador fisico
-// segun cuantos pasos necesita el motor para el recorrido completo
-#define MOTOR_PASOS_GARAJE   512
+// -- Anchos de pulso (en ticks del Timer4 con prescaler 8, 2 ticks = 1us) --
+// Periodo 20 ms = 40000 ticks. ICR4 = 39999 (TOP).
+#define SERVO_TOP            39999   // 50 Hz
+#define SERVO_PULSO_CERRADO  2000    // ~1.0 ms -> 0 grados
+#define SERVO_PULSO_ABIERTO  4000    // ~2.0 ms -> 180 grados
 
 // -- Estados del garaje ----------------------------------------------------
 #define GARAJE_CERRADO   0
 #define GARAJE_ABIERTO   1
-#define GARAJE_MOVIENDO  2
 
 // -- API publica --------------------------------------------------------
 
-// Configura los 4 pines del motor como salidas. Llamar en setup().
+// Configura Timer4 en Fast PWM 50 Hz sobre OC4A (PH3/D6) y deja el garaje
+// CERRADO. Llamar en setup().
 void motor_init();
 
-// Gira el motor N pasos en la direccion indicada.
-// BLOQUEANTE por diseno: el garaje es una accion puntual (abrir/cerrar)
-// que no necesita correr en paralelo con el resto del sistema.
-// dir: MOTOR_HORARIO o MOTOR_ANTIHORARIO
-void motor_pasos(uint16_t n, uint8_t dir);
-
-// Detiene el motor: pone las 4 bobinas en LOW (sin energizar)
-// Ahorra energia y evita calentamiento cuando no se esta moviendo
-void motor_detener();
-
-// Abre el garaje completamente (gira MOTOR_PASOS_GARAJE pasos horario)
-// Actualiza el estado interno del garaje
+// Abre el garaje: lleva el servo a la posicion ABIERTO (no bloqueante).
 void garaje_abrir();
 
-// Cierra el garaje completamente (gira MOTOR_PASOS_GARAJE pasos antihorario)
+// Cierra el garaje: lleva el servo a la posicion CERRADO (no bloqueante).
 void garaje_cerrar();
 
-// Retorna el estado actual: GARAJE_CERRADO, GARAJE_ABIERTO o GARAJE_MOVIENDO
+// Retorna el estado actual: GARAJE_CERRADO o GARAJE_ABIERTO
 uint8_t garaje_estado();
 
 #endif

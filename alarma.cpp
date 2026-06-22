@@ -19,6 +19,10 @@ static volatile uint8_t tipo_disparo_actual = ALARMA_TIPO_NINGUNO;
 // static const -> en Flash, no se puede modificar en tiempo de ejecucion
 static const char codigo_alarma[ALARMA_CODIGO_LEN + 1] = "1234";
 
+// Contador de intentos de codigo FALLIDOS consecutivos (anti-intrusos).
+// Al llegar a ALARMA_MAX_INTENTOS se dispara la alarma de intruso.
+static uint8_t intentos_fallidos = 0;
+
 
 // -- ISR de INCENDIO (SIEMPRE activas, no requieren armado) -------------
 // REGLA DEL PROYECTO: ISR minima -- solo banderas, nada de LCD/USART aqui
@@ -92,6 +96,7 @@ void alarma_init() {
     bandera_incendio     = 0;
     bandera_acceso       = 0;
     tipo_disparo_actual  = ALARMA_TIPO_NINGUNO;
+    intentos_fallidos    = 0;
 }
 
 
@@ -134,6 +139,9 @@ void alarma_desarmar() {
     bandera_acceso      = 0;
     bandera_incendio    = 0;
     tipo_disparo_actual = ALARMA_TIPO_NINGUNO;
+
+    // Desarmar con codigo correcto tambien limpia el contador de intentos
+    intentos_fallidos   = 0;
 }
 
 
@@ -201,4 +209,47 @@ uint8_t alarma_verificar_codigo(const char* codigo_ingresado) {
         }
     }
     return 1; // todos los digitos coinciden
+}
+
+
+// -- alarma_registrar_fallo() -------------------------------------------------
+// Cuenta un intento de codigo equivocado. Al alcanzar ALARMA_MAX_INTENTOS
+// dispara la alarma de INTRUSO (igual que un disparo real: LED rojo + estado
+// DISPARADA) y reinicia el contador. Retorna 1 si este fallo causo el disparo.
+uint8_t alarma_registrar_fallo() {
+
+    intentos_fallidos++;
+
+    if (intentos_fallidos >= ALARMA_MAX_INTENTOS) {
+
+        // Demasiados intentos: se asume intento de intrusion
+        estado_acceso       = ALARMA_DISPARADA;
+        tipo_disparo_actual = ALARMA_TIPO_INTRUSO;
+
+        // Encender el LED rojo (la "sirena" del sistema)
+        PORTB |= (1 << LED_DISPARADA);
+
+        // Reiniciar el contador para el proximo ciclo de intentos
+        intentos_fallidos = 0;
+
+        return 1; // se disparo la alarma de intruso en este intento
+    }
+
+    return 0; // aun no se alcanza el umbral
+}
+
+
+// -- alarma_reset_intentos() --------------------------------------------------
+// Reinicia el contador de intentos fallidos (llamar tras un codigo correcto).
+void alarma_reset_intentos() {
+    intentos_fallidos = 0;
+}
+
+
+// -- alarma_intentos_restantes() ----------------------------------------------
+// Cuantos intentos quedan antes de disparar la alarma de intruso.
+uint8_t alarma_intentos_restantes() {
+    return (ALARMA_MAX_INTENTOS > intentos_fallidos)
+         ? (ALARMA_MAX_INTENTOS - intentos_fallidos)
+         : 0;
 }
