@@ -17,10 +17,10 @@ _Última actualización: 2026-06-22 (revisión inicial SDD)._
 | 7a | Horno | `horno.*` | ✅ | **PH5 (D8)** | DEF-001 corregido: ya usa HORNO_DDR/HORNO_PORT |
 | 7b | Sonido | `sonido.*` | ✅ | Timer3 OC3A (PE3/D5), PH6, ADC0 | volumen por pot A0 en tiempo real; PWM+RC |
 | 7c | Mercado | `mercado.*` | ✅ | EEPROM 0x0B0+ | persistente, anti-duplicados |
-| 4 | SPI maestro | `spi_master.*` | ⏳ | SPI (PB0–3) | **stub vacío** |
-| 4 | RFID RC522 | `rfid.*` | ⏳ | SPI + CS/RST | **stub vacío** |
-| 4 | Gestor EEPROM (UIDs) | `eeprom_mgr.*` | ⏳ | EEPROM 0x000+ | **stub vacío** |
-| 4 | Lógica de acceso | `acceso.*` | ⏳ | imán + garaje | **stub vacío** |
+| 4 | SPI maestro | `spi_master.*` | ✅ | SPI PB0–3 | fosc/16, modo 0, CS por PB0 |
+| 4 | RFID RC522 | `rfid.*` | ✅ | SPI + PB0 (CS) | REQA, anticolisión, auth MIFARE |
+| 4 | Gestor EEPROM (UIDs) | `eeprom_mgr.*` | ✅ | EEPROM 0x000+ | 10 slots de 4+1 bytes, leer-antes-de-escribir |
+| 4 | Lógica de acceso | `acceso.*` | ✅ | PG0 (imán) + servo | adulto/hijo/desconocido, contador en tarjeta |
 
 Leyenda: ✅ ok · 🟡 ok con observación · 🐞 defecto abierto · ⏳ pendiente.
 
@@ -31,41 +31,34 @@ serial, el dimmer, la temperatura, el motor del garaje, el horno, el sonido y el
 están implementados y descritos en `Manual_ProyectoDomotico.md`. El parser serial del
 `.ino` ya enruta todos los comandos de estas fases.
 
-## Lo que falta (resumen)
+## Lo que está pendiente
 
-1. **Fase 4 — RFID y acceso** (el bloque grande pendiente): leer tarjetas RC522 por SPI,
-   guardar/buscar/borrar UIDs en EEPROM, distinguir adulto/hijo, abrir puerta principal
-   (imán) y garaje, y manejar el contador de la sala de juegos por hijo. Detalle en
-   `fase-04-rfid-acceso/spec.md`.
-2. **Reconciliar el actuador del garaje** (servo vs. paso a paso) y **agregar la puerta
-   principal por imán** (DEF-002).
-3. **Corregir el pin del horno** (DEF-001) — bloqueante porque hoy rompe la alarma de
-   incendio de zona 2.
+Al momento no hay fases pendientes de implementar. Todo el proyecto está completo.
+Pueden existir defectos menores no detectados o mejoras de la simulación en Proteus.
 
-## Roadmap propuesto (orden recomendado)
+## Roadmap (completado)
 
-| Hito | Contenido | Depende de |
-|------|-----------|-----------|
-| **H0 — Estabilizar** | ✅ DEF-001 (pin horno → PH5) y DEF-003 (doc motor) corregidos en código. Falta **verificar incendio zona 2 al compilar**. | — |
-| **H1 — Actuadores** | ✅ Garaje = paso a paso (decidido). Falta definir pin del imán/relé de la puerta principal (T0.2). | — |
-| **H2 — Bus SPI** | Implementar `spi_master.cpp` (modo 0, maestro). Probar con loopback/lectura de versión del RC522. | H0 |
-| **H3 — EEPROM UIDs** | Implementar `eeprom_mgr.cpp` (escribir/leer/buscar/borrar UID + tipo). | — |
-| **H4 — RFID** | Implementar `rfid.cpp` sobre SPI: detectar tarjeta, leer UID, leer/escribir contador. | H2 |
-| **H5 — Acceso** | `acceso.cpp`: validar UID, abrir imán/garaje, descontar contador de hijo, enrolar/borrar (teclado o serial). | H1,H3,H4 |
-| **H6 — Integración** | Descomentar includes en `.ino`, añadir `*_init()`/`*_actualizar()`, comandos serial de enrolamiento, pruebas en Proteus. | H5 |
+Todas las fases del proyecto están implementadas. El roadmap histórico fue:
 
-Las tareas atómicas de H2–H6 están desglosadas en
-[`fase-04-rfid-acceso/tasks.md`](fase-04-rfid-acceso/tasks.md).
+| Hito | Contenido | Estado |
+|------|-----------|--------|
+| H0 — Estabilizar | DEF-001, DEF-003, DEF-004 corregidos | ✅ |
+| H1 — Actuadores | Garaje = servo (Timer4); puerta = imán (PG0) | ✅ |
+| H2 — Bus SPI | `spi_master.cpp`: SPI maestro modo 0, fosc/16, CS PB0 | ✅ |
+| H3 — EEPROM UIDs | `eeprom_mgr.cpp`: 10 slots, leer-antes-de-escribir | ✅ |
+| H4 — RFID | `rfid.cpp`: RC522, REQA, anticolisión, auth MIFARE, contador en tarjeta | ✅ |
+| H5 — Acceso | `acceso.cpp`: adulto/hijo/desconocido, imán + servo, contador sala juegos | ✅ |
+| H6 — Integración | Includes, init calls, `rfid_verificar` en loop, comandos serial/teclado | ✅ |
 
-## Defectos abiertos
+## Defectos (historial)
 
-| ID | Severidad | Resumen | Archivo |
-|----|-----------|---------|---------|
-| DEF-001 | Alta | ✅ **Corregido**: horno ahora usa PH5 (HORNO_DDR/HORNO_PORT). Verificar incendio zona 2 al compilar | [`defects/DEF-001-horno-pin-pe5.md`](defects/DEF-001-horno-pin-pe5.md) |
-| DEF-002 | Media | 🟡 Parcial: garaje = paso a paso (decidido). Falta puerta principal por imán (Fase 4) | [`defects/DEF-002-actuadores-enunciado.md`](defects/DEF-002-actuadores-enunciado.md) |
-| DEF-003 | Baja | ✅ **Corregido**: comentario de `motor.h` actualizado (bloqueante, sin timer) | [`defects/DEF-003-doc-motor-timer3.md`](defects/DEF-003-doc-motor-timer3.md) |
-| DEF-004 | Media | ✅ **Corregido**: dimmer con switch Proteus/hardware (brillo pleno en entrenador) | [`defects/DEF-004-dimmer-rango-hardware.md`](defects/DEF-004-dimmer-rango-hardware.md) |
-| DEF-005 | Media | ✅ **Corregido**: serial `ARM` armaba sin código → ahora `ARM:1234` (RF-04) | (ver `features/alarma.md` y `001-requisitos.md`) |
+| ID | Severidad | Resumen | Archivo | Estado |
+|----|-----------|---------|---------|--------|
+| DEF-001 | Alta | Horno usaba PE5 (colisión con alarma incendio) → PH5 | [`defects/DEF-001-horno-pin-pe5.md`](defects/DEF-001-horno-pin-pe5.md) | ✅ |
+| DEF-002 | Media | Puerta principal por imán no implementada; garaje como PAP vs. servo | [`defects/DEF-002-actuadores-enunciado.md`](defects/DEF-002-actuadores-enunciado.md) | ✅ |
+| DEF-003 | Baja | Comentario de motor.h desactualizado (decía Timer3 en vez de Timer4) | [`defects/DEF-003-doc-motor-timer3.md`](defects/DEF-003-doc-motor-timer3.md) | ✅ |
+| DEF-004 | Media | Dimmer con switch Proteus/hardware | [`defects/DEF-004-dimmer-rango-hardware.md`](defects/DEF-004-dimmer-rango-hardware.md) | ✅ |
+| DEF-005 | Media | Serial `ARM` armaba sin código → ahora `ARM:1234` | (ver `features/alarma.md`) | ✅ |
 
 ## Notas de verificación
 

@@ -1,5 +1,6 @@
 // ProyectoDomotico.ino - Archivo principal del sistema domotico
-// Fases activas: 1 (LCD) + 2 (Teclado) + 3 (USART) + 5 (Alarma) + 6 (Motor+Temp+Dimmer)
+// Fases activas: 1 (LCD) + 2 (Teclado) + 3 (USART) + 4 (RFID+Acceso) +
+//                5 (Alarma) + 6 (Motor+Temp+Dimmer) + 7 (Horno+Sonido+Mercado)
 // Dimmer ajustado a escala 0-10 (limitacion visual confirmada en Proteus)
 //
 // LAYOUT DEL LCD (16 columnas x 2 filas):
@@ -38,16 +39,14 @@
 #include "include/horno.h"
 #include "include/sonido.h"
 #include "include/mercado.h"
-// Fases siguientes � comentados hasta que se implemente cada modulo.
-// Cuando una fase este lista: descomentar el include correspondiente,
-// llamar a su _init() en setup() y su _actualizar() en loop().
-// #include "include/spi_master.h"  // Fase 4: bus SPI para el modulo RC522 RFID
-// #include "include/rfid.h"        // Fase 4: lectura de tarjetas RFID
-// #include "include/eeprom_mgr.h"  // Fase 4: UIDs autorizados en EEPROM interna
-// #include "include/acceso.h"      // Fase 4: logica de acceso por tarjeta
-// #include "include/horno.h"       // Fase 7: control remoto del horno
-// #include "include/sonido.h"      // Fase 7: control del equipo de sonido
-// #include "include/mercado.h"     // Fase 7: lista de mercado
+// Fase 4: bus SPI para el modulo RC522 RFID
+#include "include/spi_master.h"
+// Fase 4: lectura de tarjetas RFID
+#include "include/rfid.h"
+// Fase 4: UIDs autorizados en EEPROM interna
+#include "include/eeprom_mgr.h"
+// Fase 4: logica de acceso por tarjeta
+#include "include/acceso.h"
 
 
 // ─── VARIABLES Y CONSTANTES DEL MODULO ──────────────────────────────────────
@@ -637,13 +636,71 @@ static void procesar_comando_serial(char* comando) {
         }
         usart_enviar_newline();
 
-    } else if (strncmp(comando, "MERCADO:LIST", 12) == 0) {
+     } else if (strncmp(comando, "MERCADO:LIST", 12) == 0) {
 
         usart_enviar_string("--- LISTA DE MERCADO ---");
         usart_enviar_newline();
         mercado_listar();   // esta funcion ya envia cada item + newline internamente
 
+    // ── FASE 4: ENROL:ADULTO,codigo ──────────────────────────────────────
+    } else if (strncmp(comando, "ENROL:ADULTO,", 13) == 0) {
 
+        char* codigo = comando + 13;
+        if (alarma_verificar_codigo(codigo)) {
+            rfid_entrar_modo_enrol(0, 0);
+            usart_enviar_string("OK:ENROLANDO_ADULTO");
+        } else {
+            reportar_codigo_incorrecto();
+        }
+        usart_enviar_newline();
+
+    // ── FASE 4: ENROL:HIJO,n,codigo ──────────────────────────────────────
+    } else if (strncmp(comando, "ENROL:HIJO,", 11) == 0) {
+
+        // Formato: ENROL:HIJO,<cupos>,<codigo>
+        char* resto = comando + 11;
+        uint8_t cupos = texto_a_numero(resto);
+        char* coma = strchr(resto, ',');
+        char* codigo = (coma != NULL) ? coma + 1 : resto;
+
+        if (alarma_verificar_codigo(codigo)) {
+            rfid_entrar_modo_enrol(1, cupos);
+            usart_enviar_string("OK:ENROLANDO_HIJO,");
+            usart_enviar_int(cupos);
+        } else {
+            reportar_codigo_incorrecto();
+        }
+        usart_enviar_newline();
+
+    // ── FASE 4: BORRAR,codigo ────────────────────────────────────────────
+    } else if (strncmp(comando, "BORRAR,", 7) == 0) {
+
+        char* codigo = comando + 7;
+        if (alarma_verificar_codigo(codigo)) {
+            rfid_entrar_modo_borrar();
+            usart_enviar_string("OK:BORRANDO");
+        } else {
+            reportar_codigo_incorrecto();
+        }
+        usart_enviar_newline();
+
+    // ── FASE 4: ACCESOS:n,codigo ─────────────────────────────────────────
+    } else if (strncmp(comando, "ACCESOS:", 8) == 0) {
+
+        // Formato: ACCESOS:<n>,<codigo>
+        char* resto = comando + 8;
+        uint8_t cantidad = texto_a_numero(resto);
+        char* coma = strchr(resto, ',');
+        char* codigo = (coma != NULL) ? coma + 1 : resto;
+
+        if (alarma_verificar_codigo(codigo)) {
+            rfid_entrar_modo_recarga(cantidad);
+            usart_enviar_string("OK:RECARGANDO,");
+            usart_enviar_int(cantidad);
+        } else {
+            reportar_codigo_incorrecto();
+        }
+        usart_enviar_newline();
 
     // ── COMANDO DESCONOCIDO ───────────────────────────────────────────────────
     } else {
@@ -811,6 +868,45 @@ static void ejecutar_comando_teclado(char* cmd) {
             mercado_listar();
             break;
 
+        // ── 6x RFID/ACCESO (Fase 4, requiere codigo alarma) ──────────────
+        case 61: // enrolar adulto: *61<codigo>#
+            if (alarma_verificar_codigo(args)) {
+                rfid_entrar_modo_enrol(0, 0);
+                lcd_goto(0, 0); lcd_string("ENROL ADULTO    ");
+                usart_enviar_string("OK:ENROLANDO_ADULTO");
+            } else {
+                reportar_codigo_incorrecto();
+            }
+            usart_enviar_newline();
+            break;
+
+        case 62: { // enrolar hijo: *62<cupos>A<codigo>#
+            // args = "<cupos>A<codigo>", p1 = cupos; extraer codigo tras 'A'
+            char* sep62 = strchr(args, 'A');
+            char* codigo62 = (sep62 != NULL) ? sep62 + 1 : args;
+            if (alarma_verificar_codigo(codigo62)) {
+                rfid_entrar_modo_enrol(1, p1);
+                lcd_goto(0, 0); lcd_string("ENROL HIJO      ");
+                usart_enviar_string("OK:ENROLANDO_HIJO,");
+                usart_enviar_int(p1);
+            } else {
+                reportar_codigo_incorrecto();
+            }
+            usart_enviar_newline();
+            break;
+        }
+
+        case 60: // borrar tarjeta: *60<codigo>#
+            if (alarma_verificar_codigo(args)) {
+                rfid_entrar_modo_borrar();
+                lcd_goto(0, 0); lcd_string("BORRAR TARJETA  ");
+                usart_enviar_string("OK:BORRANDO");
+            } else {
+                reportar_codigo_incorrecto();
+            }
+            usart_enviar_newline();
+            break;
+
         // ── 9x ALARMA (armar/desarmar con codigo) ────────────────────────────
         case 91: // armar (args = codigo de 4 digitos, ej. *91 1234 #)
             if (alarma_verificar_codigo(args)) {
@@ -865,6 +961,12 @@ void setup() {
     sonido_init();     // Fase 7b: Timer3 PWM volumen (PE3/D5)->RC + LED PH6 (D9); pot volumen en A13 (PK5)
     mercado_init();     // Fase 7c: lista de mercado en EEPROM (sin hardware)
 
+    // Fase 4: RFID y control de acceso
+    spi_init();         // SPI maestro (PB0-PB3) para RC522
+    eeprom_init();      // gestor de UIDs en EEPROM (0x000-0x09F)
+    rfid_init();        // modulo RC522 por SPI
+    acceso_init();      // iman puerta principal (PG0) + garaje (servo)
+
     // sei(): habilita las interrupciones globales poniendo el bit I del SREG en 1.
     // DEBE ir DESPUES de todos los init() porque:
     //   - teclado_init() configuro Timer2 (ya listo para disparar ISR)
@@ -886,7 +988,9 @@ void setup() {
     // Enviar el menu de comandos disponibles a la terminal al encender
     usart_enviar_string("Comandos: ARM:xxxx / DISARM:xxxx / LUZ:0-10 / GARAJE:ABRIR / GARAJE:CERRAR");
     usart_enviar_newline();
-    usart_enviar_string("HORNO:temp,min / SONIDO:ON (vol por pot A0) / SONIDO:OFF / MERCADO:ADD,nom,cant / MERCADO:DEL,nom / MERCADO:LIST");
+    usart_enviar_string("HORNO:temp,min / SONIDO:ON / SONIDO:OFF / MERCADO:ADD,nom,cant / MERCADO:DEL,nom / MERCADO:LIST");
+    usart_enviar_newline();
+    usart_enviar_string("ENROL:ADULTO / ENROL:HIJO,N / BORRAR / ACCESOS:N");
     usart_enviar_newline();
     pos_codigo = 0; // asegurar que el buffer del codigo empiece vacio (redundante pero explicito)
 }
@@ -935,6 +1039,9 @@ void loop() {
         // Si tipo fuera ALARMA_TIPO_NINGUNO (0), alarma_actualizar() no habria retornado 1
         // (eso se garantiza dentro de alarma.cpp), asi que no hay caso else aqui.
     }
+
+    // ── 1b. RFID (Fase 4) ─────────────────────────────────────────────────────
+    rfid_verificar();
 
     // ── 2. TECLADO (Fase 2 + logica de alarma/dimmer) ────────────────────────
     // teclado_hay(): retorna 1 si la ISR del Timer2 deposito una tecla nueva.

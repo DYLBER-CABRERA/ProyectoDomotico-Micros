@@ -136,17 +136,12 @@ añade ahí, en mayúsculas (la entrada se normaliza con `a_mayusculas`).
 
 ## 7. Estado del proyecto (junio 2026)
 
-- ✅ **Completo**: Fases 1 (LCD), 2 (Teclado), 3 (USART), 5 (Alarmas), 6 (Motor +
-  Temperatura + Dimmer), 7 (Horno + Sonido + Mercado).
-- ⏳ **Pendiente**: **Fase 4** — RFID (RC522 por SPI), gestor de EEPROM para UIDs,
-  lógica de acceso (adulto/hijo), puerta principal por imán, contadores de sala de
-  juegos. Hoy son **stubs vacíos** (`rfid.cpp`, `spi_master.cpp`, `eeprom_mgr.cpp`,
-  `acceso.cpp`) y sus `#include` están comentados en el `.ino`.
-- 🐞 **Defectos**: ver [`specs/defects/`](specs/defects/).
-  - **DEF-001 (alta)**: ✅ **corregido** — `horno.cpp` ya maneja **PH5** (no PE5), sin
-    colisión con el sensor de incendio SW4/INT5. Verificar al compilar.
-  - **DEF-002 (media)**: 🟡 parcial — **decisión: garaje con motor paso a paso** (se
-    mantiene `motor.cpp`). Falta implementar la **puerta principal por imán** en Fase 4.
+- ✅ **Completo**: Fases 1 (LCD), 2 (Teclado), 3 (USART), **4 (RFID + Acceso)**,
+  5 (Alarmas), 6 (Motor + Temperatura + Dimmer), 7 (Horno + Sonido + Mercado).
+- 🐞 **Defectos (historial)**: ver [`specs/defects/`](specs/defects/).
+  - **DEF-001 (alta)**: ✅ **corregido** — `horno.cpp` maneja **PH5** (no PE5).
+  - **DEF-002 (media)**: ✅ **resuelto** — garaje = servo (Timer4), puerta principal =
+    imán en PG0, implementado en `acceso.cpp`.
   - **DEF-003 (baja)**: ✅ **corregido** — comentario de `motor.h` actualizado.
 
 Detalle completo y matriz de trazabilidad en

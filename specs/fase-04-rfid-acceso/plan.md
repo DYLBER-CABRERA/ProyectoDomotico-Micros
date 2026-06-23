@@ -3,49 +3,27 @@
 Plan técnico para llevar la Fase 4 de stubs a integrada. Ejecutar en este orden; cada
 paso es verificable de forma aislada antes de pasar al siguiente.
 
-## Estrategia
+## ✅ Fase 4 completada (2026-06-23)
 
-Construir de **abajo hacia arriba** (bus → almacenamiento → driver → lógica → integración)
-para poder probar cada capa sin depender de las superiores. Cada módulo respeta el patrón
-`*_init()` + API pública del `.h` (la constitución, Art. 2).
+La implementación siguió la estrategia de **abajo hacia arriba**:
 
-## Pasos
+1. **SPI**: `spi_master.cpp` — maestro modo 0, fosc/16, CS en PB0.
+2. **EEPROM**: `eeprom_mgr.cpp` — 10 slots UID+tipo, leer-antes-de-escribir.
+3. **RFID**: `rfid.cpp` — RC522, REQA, anticolisión, auth MIFARE, contador en tarjeta,
+   máquina de estados no bloqueante, operaciones pendientes (enrol/borrar/recarga).
+4. **Acceso**: `acceso.cpp` — imán en PG0, servo garaje, lógica adulto/hijo.
+5. **Integración**: en el `.ino` — includes, inits, `rfid_verificar()` en loop, comandos
+   serial y teclado (6x).
+6. **Cierre**: specs de features, actualización de estado, cierre de DEF-002.
 
-### Paso 0 — Decisiones (DEF-002 + contador en tarjeta)
-✅ Actuador del garaje decidido: **motor paso a paso** (se reutiliza `motor.cpp`). Falta
-cerrar: pin del imán/relé de la puerta principal, y si el contador de la sala de juegos
-vive en la tarjeta o en EEPROM. Registrar en `spec.md` §3 y en `003-arquitectura.md`.
+## Pendiente (verificación en Proteus)
 
-### Paso 1 — `spi_master.cpp`
-Configurar SPI maestro (modo 0, fosc/16). Implementar `spi_transferir` con espera de
-`SPIF`. `SS`/CS como salidas. **Prueba**: leer el registro `VersionReg` del RC522 (debe
-devolver `0x91`/`0x92`) o, sin RC522, un loopback MOSI↔MISO.
-
-### Paso 2 — `eeprom_mgr.cpp`
-Implementar lectura/escritura por dirección y la gestión de UIDs (`guardar`, `buscar`,
-`borrar`) sobre `0x000–0x09F`, con marca de slot vacío. Reusar patrón anti-escritura de
-`mercado.cpp`. **Prueba**: guardar 2 UIDs, buscarlos, borrar uno, verificar persistencia
-tras reset (dump por serial).
-
-### Paso 3 — `rfid.cpp`
-Sobre `spi_master`: reset suave del RC522, encender antena, detectar tarjeta (REQA) y
-leer UID (anticolisión). Implementar lectura/escritura del bloque del contador si aplica.
-**Prueba**: `rfid_hay_tarjeta()` y `rfid_leer_uid()` devuelven el UID correcto por serial
-al acercar una tarjeta.
-
-### Paso 4 — `acceso.cpp`
-Implementar los actuadores (imán + garaje según Paso 0) y la lógica adulto/hijo/sala de
-juegos usando `eeprom_mgr` y `rfid`. **Prueba**: simular UID conocido/desconocido y
-verificar concesión/denegación y descuento de cupos.
-
-### Paso 5 — Integración en el `.ino`
-Descomentar includes, añadir `*_init()` en `setup()`, `rfid_verificar()` en `loop()`, y
-los comandos serial `ENROL/BORRAR/ACCESOS`. **Prueba**: flujo completo de extremo a
-extremo en Proteus + actualizar Manual §7 con las pruebas nuevas.
-
-### Paso 6 — Cierre
-Actualizar `001-requisitos.md` (RF-05/06/08/09 → ✅), `002-estado-y-roadmap.md` y las
-specs de `features/` nuevas (`features/rfid.md`, `features/acceso.md`). Cerrar DEF-002.
+- T1.4: Verificar lectura de `VersionReg` del RC522.
+- T2.5: Verificar persistencia de UIDs en EEPROM tras reset.
+- T3.5: Verificar lectura de UID por serial al acercar tarjeta.
+- T4.4: Verificar flujo adulto/hijo/desconocido.
+- T5.5: Verificar flujo completo extremo a extremo.
+- T6.4: Añadir pruebas 10–12 al Manual §7.
 
 ## Riesgos
 

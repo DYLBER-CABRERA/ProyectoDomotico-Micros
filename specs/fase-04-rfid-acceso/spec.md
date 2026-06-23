@@ -22,17 +22,15 @@ juegos** por hijo que se descuenta en cada ingreso y que los padres pueden recar
 | RF-09 | Los padres (tarjeta adulto o comando serial) recargan los accesos de un hijo. |
 | RF-15 | Persistir UIDs/tipos/contadores en EEPROM. |
 
-## 3. Decisiones previas (bloqueantes)
+## 3. Decisiones tomadas
 
-1. **DEF-002**: ✅ **decidido — garaje con motor paso a paso** (se reutiliza `motor.cpp`
-   vía `acceso_abrir_garaje()`/`acceso_cerrar_garaje()`). Queda por definir solo el **pin
-   del imán/relé de la puerta principal** (salida digital simple).
-2. **Dónde vive el contador de la sala de juegos**: el enunciado dice "programada en su
-   tarjeta RFID" → almacenarlo **en la tarjeta** (bloque de datos del RC522) es lo fiel.
-   Alternativa pragmática: contador en EEPROM del Mega indexado por UID. **Recomendado:
-   en la tarjeta** (cumple literal); documentar si se opta por EEPROM.
-3. **Hardware RC522 en Proteus**: confirmar disponibilidad del modelo; si no, simular la
-   lectura de UID por otro medio acordado con el docente.
+1. **Garaje**: servomotor por PWM en Timer4/OC4A/PH3 (`motor.cpp`). No bloqueante.
+   Se reutiliza vía `acceso_abrir_garaje()`/`acceso_cerrar_garaje()`. ✅
+2. **Puerta principal (imán/relé)**: **PG0 (D41)**, salida digital simple. ✅
+3. **Contador de sala de juegos**: **en la tarjeta RFID** (bloque 4 MIFARE, primer byte).
+   Lectura/escritura con autenticación key A (0xFF×6). ✅
+4. **Hardware RC522 en Proteus**: pendiente de verificar. Si no hay modelo, simular
+   lectura de UID vía entrada serial acordada con el docente.
 
 ## 4. Diseño por módulo
 
@@ -78,10 +76,10 @@ juegos** por hijo que se descuenta en cada ingreso y que los padres pueden recar
 
 | Comando | Acción | OK | ERROR |
 |---------|--------|----|----|
-| `ENROL:ADULTO` | Enrolar como adulto la próxima tarjeta presentada | `OK:ENROLADO_ADULTO,<uid>` | `ERROR:ENROL_TIMEOUT` / `ERROR:EEPROM_LLENA` |
-| `ENROL:HIJO,<n>` | Enrolar hijo con `n` accesos a sala de juegos | `OK:ENROLADO_HIJO,<uid>,<n>` | idem |
-| `BORRAR` | Borrar la próxima tarjeta presentada | `OK:BORRADO,<uid>` | `ERROR:UID_NO_EXISTE` |
-| `ACCESOS:<uid>,<n>` | Recargar accesos de un hijo (padres) | `OK:ACCESOS,<uid>,<n>` | `ERROR:UID_NO_EXISTE` |
+| `ENROL:ADULTO,<cod>` | Enrolar adulto (requiere código alarma) | `OK:ENROLANDO_ADULTO` → `OK:ENROLADO_ADULTO` | `ERROR:CODIGO` / `ERROR:EEPROM_LLENA_O_DUPLICADO` |
+| `ENROL:HIJO,<n>,<cod>` | Enrolar hijo con `n` cupos | `OK:ENROLANDO_HIJO,N` → `OK:ENROLADO_HIJO,N` | idem |
+| `BORRAR,<cod>` | Borrar próxima tarjeta | `OK:BORRANDO` → `OK:BORRADO` | `ERROR:CODIGO` / `ERROR:UID_NO_EXISTE` |
+| `ACCESOS:<n>,<cod>` | Recargar `n` accesos | `OK:RECARGANDO,N` → `OK:ACCESOS,N` | `ERROR:CODIGO` / `ERROR:UID_NO_EXISTE` / `ERROR:UID_NO_ES_HIJO` |
 
 Alertas asíncronas: `ACCESO:CONCEDIDO,<uid>`, `ACCESO:DENEGADO`,
 `ACCESO:DENEGADO_SIN_CUPOS`, `SALA_JUEGOS:<uid>,<restantes>`.

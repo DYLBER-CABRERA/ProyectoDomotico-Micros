@@ -47,25 +47,25 @@ capturan en ISRs cortas que dejan banderas/datos que el `loop()` consume.
 | D5 | PE3 | OUT PWM | Sonido volumen (OC3A, Timer3) → RC | sonido |
 | D9 | PH6 | OUT | LED equipo de sonido | sonido |
 | D8 | PH5 | OUT | LED horno (rele) | horno |
-| ~~D41–D38~~ | ~~PG0–PG3~~ | — | **Libres** (antes motor PAP) | — |
-| ? | (libre) | OUT | Imán/relé puerta principal — **pin por definir** (Fase 4, T0.2) | acceso |
+| D41 | PG0 | OUT | Imán/relé puerta principal | acceso |
+| D52 | PB1 | OUT | SCK SPI (RC522) | spi_master |
+| D51 | PB2 | OUT | MOSI SPI | spi_master |
+| D50 | PB3 | IN | MISO SPI | spi_master |
+| D53 | PB0 | OUT | CS / SS SPI (RC522) | spi_master |
 
 > ✅ **DEF-001 corregido**: `horno.cpp` usa PH5 mediante las macros `HORNO_DDR`/
 > `HORNO_PORT` de `horno.h` (antes escribía PE5, que es el sensor de incendio SW4/INT5).
-> ✅ **DEF-002 (garaje)**: ahora es **servomotor** por PWM en **D6/PH3 (Timer4)**, no
-> bloqueante. En Proteus se conecta un servo; en el entrenador, un LED en D6. El motor
-> paso a paso fue retirado y PG0–PG3 quedan libres. Falta solo el pin del imán de la
-> puerta principal.
+> ✅ **DEF-002 (garaje)**: servomotor por PWM en **D6/PH3 (Timer4)**, no bloqueante.
+> El garaje es servo; la puerta principal usa imán en **PG0 (D41)**. Ambos implementados
+> en `acceso.cpp`.
 > 🆕 **ADC compartido** (`adc.cpp`): temperatura en ADC9 (A9) y volumen en ADC13 (A13/PK5),
 > con conmutación de mux y conversión de descarte por lectura.
 
-### Pines libres para Fase 4 (SPI + RFID)
+### SPI y Fase 4 (RFID RC522)
 
-El SPI por hardware del Mega está en el **Puerto B**: `SS=PB0 (D53)`, `SCK=PB1 (D52)`,
-`MOSI=PB2 (D51)`, `MISO=PB3 (D50)`. Estos están **libres** (PB5–PB7 los usan dimmer y
-LEDs de alarma, pero PB0–PB3 no). Para el RC522 se necesitan además **RST** y **CS**
-(CS puede ser PB0/SS u otro pin libre del Puerto H/D/J). Validar la elección final contra
-esta tabla antes de implementar.
+SPI por hardware del Mega en **Puerto B**: `SS=PB0 (D53)`, `SCK=PB1 (D52)`, `MOSI=PB2 (D51)`,
+`MISO=PB3 (D50)`. PB0–PB3 están libres (PB5–PB7 los usan dimmer y LEDs de alarma).
+PB0 se usa como CS del RC522. No se necesita RST por separado (se hace soft-reset por SPI).
 
 ## Timers e interrupciones
 
@@ -109,10 +109,15 @@ Entrada normalizada a mayúsculas. Comando terminado en `\n`.
 | `MERCADO:ADD,nom,cant` | Agregar producto | `OK:MERCADO_AGREGADO` | `ERROR:MERCADO_LLENO_O_DUPLICADO` / `ERROR:FORMATO_MERCADO` |
 | `MERCADO:DEL,nom` | Eliminar | `OK:MERCADO_ELIMINADO` | `ERROR:MERCADO_NO_ENCONTRADO` |
 | `MERCADO:LIST` | Listar | (lista) | `LISTA VACIA` |
+| `ENROL:ADULTO,<cod>` | Enrolar próxima tarjeta como adulto | `OK:ENROLANDO_ADULTO` → `OK:ENROLADO_ADULTO` | `ERROR:CODIGO` / `ERROR:EEPROM_LLENA_O_DUPLICADO` |
+| `ENROL:HIJO,<n>,<cod>` | Enrolar hijo con N cupos | `OK:ENROLANDO_HIJO,N` → `OK:ENROLADO_HIJO,N` | idem |
+| `BORRAR,<cod>` | Borrar próxima tarjeta presentada | `OK:BORRANDO` → `OK:BORRADO` | `ERROR:CODIGO` / `ERROR:UID_NO_EXISTE` |
+| `ACCESOS:<n>,<cod>` | Recargar N accesos (presentar tarjeta hijo) | `OK:RECARGANDO,N` → `OK:ACCESOS,N` | `ERROR:CODIGO` / `ERROR:UID_NO_EXISTE` / `ERROR:UID_NO_ES_HIJO` |
 | (otro) | — | — | `ERROR:COMANDO_DESCONOCIDO` |
 
 Alertas asíncronas: `ALARMA:INCENDIO`, `ALARMA:ACCESO`, `ALARMA:INTRUSO` (3 códigos
-equivocados seguidos), `HORNO:FIN`.
+equivocados seguidos), `HORNO:FIN`, `ACCESO:CONCEDIDO_ADULTO`, `ACCESO:CONCEDIDO_HIJO,N`,
+`ACCESO:DENEGADO`, `ACCESO:DENEGADO_SIN_CUPOS`.
 
 ### Comandos por teclado (entrenador sin terminal)
 
@@ -122,13 +127,8 @@ dígitos) + parámetros (`A` separa parámetros), `#` ejecuta, `*` cancela. Impl
 `procesar_tecla_alarma()` + `ejecutar_comando_teclado()` del `.ino`. Tablas completas y
 catálogo de productos del mercado en **[`../COMANDOS_TECLADO.md`](../COMANDOS_TECLADO.md)**.
 Resumen de códigos: `1x` garaje, `2x` sonido, `3x` horno, `41` luz, `5x` mercado,
-`9x` alarma. Teclas directas: `A`/`B` armar/desarmar (con código), `C`/`D` luz ±.
-
-### Comandos previstos para Fase 4 (propuesta)
-
-`ENROL:ADULTO` / `ENROL:HIJO,<n>` (enrolar la próxima tarjeta presentada, con `n`
-accesos para hijo), `BORRAR:<uid>` o `BORRAR` (siguiente tarjeta), `ACCESOS:<uid>,<n>`
-(recargar accesos de un hijo). Definir formato final en `fase-04-rfid-acceso/spec.md`.
+`60` borrar, `61` enrol adulto, `62` enrol hijo, `9x` alarma.
+Teclas directas: `A`/`B` armar/desarmar (con código), `C`/`D` luz ±.
 
 ## Layout del LCD
 
