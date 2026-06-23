@@ -212,33 +212,39 @@ uint8_t usart_hay_linea() {
 
 
 // -- usart_leer_linea(dest) ------------------------------------------
-// Copia los bytes del buffer hasta '\n' (incluido) a dest[],
-// luego agrega '\0' para que sea un string C valido.
-// Retorna la cantidad de caracteres copiados (sin el '\0').
+// Copia los bytes del buffer hasta '\n' o '\r' a dest[],
+// descarta el companero sobrante ('\n' tras '\r' o viceversa),
+// procesa backspace (0x08 / 0x7F) para permitir edicion en la terminal,
+// y agrega '\0' al final. Retorna la cantidad de caracteres utiles.
 // dest[] debe tener al menos USART_RX_BUF_SIZE bytes.
 uint8_t usart_leer_linea(char* dest) {
 
-    uint8_t n = 0;    // contador de caracteres copiados
+    uint8_t n = 0;
     char c;
 
-    // Leer hasta '\n', hasta llenar el buffer destino,
-    // o hasta que no haya mas datos
-     while (usart_hay_dato() && n < (USART_RX_BUF_SIZE - 1)) {
+    while (usart_hay_dato() && n < (USART_RX_BUF_SIZE - 1)) {
 
-        // ESTA LINEA FALTABA -- es la que realmente consume el
-        // byte del buffer circular y avanza rx_tail
         c = usart_recibir_char();
 
         if (c == '\n' || c == '\r') {
-            // Fin de linea detectado. No se intenta descartar un
-            // companero sobrante (caso \r\n completo): si llega,
-            // la siguiente llamada a usart_leer_linea() lo recibira
-            // como primer caracter y retornara una linea vacia
-            // (n=0), que el parser de comandos simplemente ignora.
+            // Descartar el companero sobrante del par \r\n o \n\r
+            // para que no genere una linea vacia en el siguiente ciclo.
+            if (usart_hay_dato()) {
+                char siguiente = (char)rx_buf[rx_tail];
+                if ((c == '\r' && siguiente == '\n') ||
+                    (c == '\n' && siguiente == '\r')) {
+                    rx_tail = (rx_tail + 1) & USART_RX_BUF_MASK;
+                }
+            }
             break;
         }
 
-        dest[n++] = c;
+        if (c == '\b' || c == 0x7F) {
+            // Backspace: eliminar el ultimo caracter acumulado
+            if (n > 0) n--;
+        } else {
+            dest[n++] = c;
+        }
     }
 
     dest[n] = '\0';
