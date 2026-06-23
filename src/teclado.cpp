@@ -15,8 +15,8 @@
 // Necesario para el debounce de 20ms y el settle de 5us
 #include <util/delay.h>
 
-// Incluir el propio header — importa las definiciones de pines
-// y los prototipos de las funciones públicas
+// Incluir el propio header � importa las definiciones de pines
+// y los prototipos de las funciones p�blicas
 #include "../include/teclado.h"
 
 
@@ -337,3 +337,4 @@ uint8_t teclado_hay() {
     // 0 = no hay tecla, 1 = hay tecla esperando
     return hay_tecla;
 }
+

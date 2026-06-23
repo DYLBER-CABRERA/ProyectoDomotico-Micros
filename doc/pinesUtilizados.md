@@ -1,4 +1,4 @@
----
+﻿---
 title: Mapa de Pines — Sistema Domótico ATmega2560 (Arduino Mega 2560)
 ---
 
@@ -19,9 +19,6 @@ graph LR
     classDef pwm     fill:#FFE0B2,stroke:#E65100,color:#000,font-weight:bold
     classDef periph  fill:#EDE7F6,stroke:#4527A0,color:#000
 
-    %% ═══════════════════════════════════════════════════════════
-    %%  FASE 1 — LCD 16x2 HD44780 — PUERTO A (modo 4 bits)
-    %% ═══════════════════════════════════════════════════════════
     subgraph G_LCD["FASE 1 · LCD 16×2 HD44780"]
         direction LR
         LCD["LCD 16×2\nHD44780\nVCC=5V · RW→GND"]:::periph
@@ -41,11 +38,6 @@ graph LR
         PA7 --> LCD
     end
 
-    %% ═══════════════════════════════════════════════════════════
-    %%  FASE 2 — TECLADO MATRICIAL 4×4
-    %%  Columnas = SALIDAS (Puerto L)  |  Filas = ENTRADAS (Puerto C)
-    %%  ISR: TIMER2_COMPA_vect cada ~10ms (OCR2A=155, prescaler=1024)
-    %% ═══════════════════════════════════════════════════════════
     subgraph G_TEC["FASE 2 · Teclado Matricial 4×4 (barrido por Timer2)"]
         direction LR
         TEC["Teclado\nMatricial 4×4"]:::periph
@@ -71,10 +63,6 @@ graph LR
         TEC -->|lectura| PC3
     end
 
-    %% ═══════════════════════════════════════════════════════════
-    %%  FASE 3 — USART0 (9600 bps · 8 bits · sin paridad · 1 stop)
-    %%  ISR: USART0_RX_vect — buffer circular 32 bytes
-    %% ═══════════════════════════════════════════════════════════
     subgraph G_US["FASE 3 · USART0 — Comunicación Serial"]
         direction LR
         VT["Virtual Terminal\n(Proteus) / Monitor Serial\n9600 bps 8N1"]:::periph
@@ -86,12 +74,6 @@ graph LR
         VT -->|"TXD→RX (cruzado)"| PE0
     end
 
-    %% ═══════════════════════════════════════════════════════════
-    %%  FASE 5 — ALARMA (Acceso + Incendio)
-    %%  INT2/INT3: flanco de subida · alarma de acceso (armable)
-    %%  INT4/INT5: flanco de subida · incendio (siempre activo)
-    %%  Los switches tienen R10kΩ a GND → reposo=LOW, activo=HIGH
-    %% ═══════════════════════════════════════════════════════════
     subgraph G_AL["FASE 5 · Sistema de Alarma (Acceso + Incendio)"]
         direction TB
         subgraph PD_AL["PUERTO D — INT2/INT3 · Sensores de ACCESO\n(habilitar con alarma_armar())"]
@@ -120,12 +102,6 @@ graph LR
         PB7 --> LEDR
     end
 
-    %% ═══════════════════════════════════════════════════════════
-    %%  FASE 6a — MOTOR PAP GARAJE — PUERTO G
-    %%  Secuencia de un paso completo: IN1→IN2→IN3→IN4 (horario)
-    %%  MOTOR_PASOS_GARAJE = 512 pasos para abrir/cerrar
-    %%  Delay entre pasos = 5ms (_delay_ms(5))
-    %% ═══════════════════════════════════════════════════════════
     subgraph G_MOT["FASE 6a · Motor Paso a Paso — Garaje"]
         direction LR
         MOT["Motor PAP\n+ Driver ULN2003\n(el driver maneja corriente,\nel Mega da señales 5V)"]:::periph
@@ -141,16 +117,6 @@ graph LR
         PG3 --> MOT
     end
 
-    %% ═══════════════════════════════════════════════════════════
-    %%  FASE 6b — CONTROL DE TEMPERATURA — PUERTO K
-    %%  ADC: REFS=AVCC(5V) · Prescaler=128 · Promedio de 8 muestras
-    %%  Canal ADC9 (MUX5=1, MUX[4:0]=00001)
-    %%  ⚠ NOTA: el archivo temp_init() usa 0x01 en MUX → lee ADC9 (PK1, A9)
-    %%          El comentario interno dice ADC8 pero el código efectivo es ADC9.
-    %%          Conectar el potenciómetro a A9 para que coincida con el código.
-    %%  Histeresis calefactor: ON<18°C / OFF>20°C
-    %%  Histeresis ventilador: ON>26°C / OFF<24°C
-    %% ═══════════════════════════════════════════════════════════
     subgraph G_TMP["FASE 6b · Control de Temperatura"]
         direction LR
         POT["Potenciómetro 10kΩ\n(simula sensor de\ntemperatura 0-40°C)"]:::periph
@@ -166,13 +132,6 @@ graph LR
         PK4 --> VEN
     end
 
-    %% ═══════════════════════════════════════════════════════════
-    %%  FASE 6c — DIMMER ILUMINACIÓN — Timer1 Canal A (OC1A)
-    %%  Modo: Fast PWM 8-bit (WGM=0b0101) · Prescaler=8
-    %%  f_PWM = 16MHz / (8*256) ≈ 7812 Hz
-    %%  Escala nivel 0-10 → OCR1A = nivel*2 (0-20)
-    %%  → duty cycle 0% a 7.8% (zona visible en Proteus)
-    %% ═══════════════════════════════════════════════════════════
     subgraph G_DIM["FASE 6c · Dimmer Iluminación (PWM Timer1)"]
         direction LR
         LEDIM["LED / Lámpara\ndimerizable\nnivel 0-10\nvía teclado (C/D)\no comando LUZ:N"]:::periph
@@ -182,9 +141,6 @@ graph LR
         PB5 --> LEDIM
     end
 
-    %% ═══════════════════════════════════════════════════════════
-    %%  RECURSOS INTERNOS DEL MCU (sin pin externo)
-    %% ═══════════════════════════════════════════════════════════
     subgraph G_INT["RECURSOS INTERNOS ATmega2560 (sin pin externo)"]
         direction TB
         T1["TIMER 1 — Fast PWM 8-bit\nCS=8 · f≈7812Hz · OC1A→PB5\nUso: Dimmer iluminación"]:::pwm

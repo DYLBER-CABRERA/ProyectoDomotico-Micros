@@ -1,4 +1,4 @@
-// adc.cpp - Lectura ADC compartida (registros directos ATmega2560)
+﻿// adc.cpp - Lectura ADC compartida (registros directos ATmega2560)
 
 #include <avr/io.h>
 #include "../include/adc.h"
@@ -51,3 +51,4 @@ uint16_t adc_leer(uint8_t canal) {
 
     return (uint16_t)(suma >> 4); // dividir entre 16
 }
+

@@ -13,8 +13,8 @@
 //                son delays precisos basados en F_CPU
 #include <util/delay.h>
 
-// lcd.h → incluye las definiciones de pines y los prototipos
-//          de las funciones públicas de este módulo
+// lcd.h ? incluye las definiciones de pines y los prototipos
+//          de las funciones p�blicas de este m�dulo
 #include "../include/lcd.h"
 
 

@@ -1,4 +1,4 @@
-// motor.cpp - Servomotor del garaje (PWM 50 Hz, Timer4 / OC4A / PH3)
+﻿// motor.cpp - Servomotor del garaje (PWM 50 Hz, Timer4 / OC4A / PH3)
 // Sin librerias - registros directos ATmega2560
 
 #include <avr/io.h>
@@ -51,3 +51,4 @@ void garaje_cerrar() {
 uint8_t garaje_estado() {
     return estado_garaje;
 }
+

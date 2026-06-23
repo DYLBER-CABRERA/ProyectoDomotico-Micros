@@ -6,3 +6,4 @@ void acceso_abrir_principal()  { /* TODO */ }
 void acceso_cerrar_principal() { /* TODO */ }
 void acceso_abrir_garaje()     { /* TODO */ }
 void acceso_cerrar_garaje()    { /* TODO */ }
+

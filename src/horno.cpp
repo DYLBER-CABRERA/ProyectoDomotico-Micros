@@ -1,4 +1,4 @@
-// horno.cpp - Control remoto del horno
+﻿// horno.cpp - Control remoto del horno
 // Sin librerias - registros directos ATmega2560
 
 #include <avr/io.h>
@@ -109,3 +109,4 @@ uint16_t horno_segundos_restantes() {
 uint8_t horno_temp_objetivo() {
     return temp_objetivo;
 }
+

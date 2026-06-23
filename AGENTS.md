@@ -55,7 +55,7 @@ Módulos: `lcd`, `teclado`, `usart`, `alarma`, `motor`, `temperatura`, `dimmer`,
 
 **No hay toolchain en este entorno; la compilación la hace el usuario.**
 
-- **Arduino IDE**: abrir `ProyectoDomotico.ino` (toma los `.cpp/.h` del directorio
+- **Arduino IDE**: abrir `ProyectoDomotico.ino` (toma `src/` y `include/` automáticamente)
   automáticamente). Placa: *Arduino Mega or Mega 2560*, procesador *ATmega2560*.
   `Sketch → Export Compiled Binary` genera el `.hex` en `build/arduino.avr.mega/`.
 - **arduino-cli**:

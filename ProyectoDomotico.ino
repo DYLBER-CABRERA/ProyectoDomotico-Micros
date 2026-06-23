@@ -1,4 +1,4 @@
-// ProyectoDomotico.ino - Archivo principal del sistema domotico
+﻿// ProyectoDomotico.ino - Archivo principal del sistema domotico
 // Fases activas: 1 (LCD) + 2 (Teclado) + 3 (USART) + 5 (Alarma) + 6 (Motor+Temp+Dimmer)
 // Dimmer ajustado a escala 0-10 (limitacion visual confirmada en Proteus)
 //
@@ -12,7 +12,7 @@
 //    temporalmente mientras el usuario esta digitando)
 
 
-// ─── INCLUDES ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ INCLUDES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // string.h: provee strncmp() para comparar N caracteres de dos cadenas sin copiarlas.
 //   Se usa para parsear prefijos de comandos: "ARM", "DISARM:", "LUZ:", "GARAJE:ABRIR".
@@ -50,7 +50,7 @@
 // #include "include/mercado.h"     // Fase 7: lista de mercado
 
 
-// ─── VARIABLES Y CONSTANTES DEL MODULO ──────────────────────────────────────
+// â”€â”€â”€ VARIABLES Y CONSTANTES DEL MODULO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // 'static' en el ambito de archivo hace las variables PRIVADAS de este .ino:
 // ningun otro modulo puede acceder ni modificar estas variables directamente.
 
@@ -87,14 +87,14 @@ static uint16_t contador_temp = 0;
 static uint16_t ultima_interaccion = 9999;
 
 // Umbral de ciclos sin interaccion antes de que la temperatura pueda actualizar el LCD.
-// Logica: si ultima_interaccion >= TIEMPO_MOSTRAR_INTERACCION → linea 1 libre → mostrar temp.
-//         si ultima_interaccion <  TIEMPO_MOSTRAR_INTERACCION → usuario activo → NO pisar LCD.
+// Logica: si ultima_interaccion >= TIEMPO_MOSTRAR_INTERACCION â†’ linea 1 libre â†’ mostrar temp.
+//         si ultima_interaccion <  TIEMPO_MOSTRAR_INTERACCION â†’ usuario activo â†’ NO pisar LCD.
 // Aumentar este valor hace que el mensaje de codigo/luz permanezca mas tiempo visible
 // antes de que la temperatura vuelva a aparecer en la mitad izquierda de la linea 1.
 #define TIEMPO_MOSTRAR_INTERACCION  12000
 
 
-// ─── MODO COMANDO POR TECLADO (entrenador sin terminal serial) ──────────────
+// â”€â”€â”€ MODO COMANDO POR TECLADO (entrenador sin terminal serial) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // En el entrenador fisico solo hay teclado: no hay terminal para escribir
 // "SONIDO:ON,75". Por eso se agrega un "modo comando" que se activa con la
 // tecla '*', se teclea un codigo de funcion de 2 digitos + parametros (la
@@ -116,14 +116,14 @@ static uint8_t cmd_pos = 0;
 static void ejecutar_comando_teclado(char* cmd);
 
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // a_mayusculas(s)
 // Convierte la cadena 's' a mayusculas en el lugar (modifica el original).
 // RAZON: strncmp() en procesar_comando_serial() es case-sensitive.
 //        Sin esta conversion, "arm", "Arm" y "ARM" serian cadenas distintas.
 //        Al normalizar antes de comparar, se acepta cualquier casing del usuario.
-// PARAMETRO: char* s — puntero al string a convertir (debe ser mutable, no literal).
-// ─────────────────────────────────────────────────────────────────────────────
+// PARAMETRO: char* s â€” puntero al string a convertir (debe ser mutable, no literal).
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static void a_mayusculas(char* s) {
 
     // while (*s): desreferencia el puntero y evalua el caracter apuntado.
@@ -142,7 +142,7 @@ static void a_mayusculas(char* s) {
         //   El puntero 's' sigue apuntando al mismo lugar; solo se modifica el VALOR.
         *s = toupper((unsigned char)*s);
 
-        // s++: aritmetica de punteros — avanza el puntero 1 posicion (1 byte para char).
+        // s++: aritmetica de punteros â€” avanza el puntero 1 posicion (1 byte para char).
         // Ahora *s apunta al siguiente caracter del string.
         s++;
     }
@@ -150,7 +150,7 @@ static void a_mayusculas(char* s) {
 }
 
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // reportar_codigo_incorrecto()
 // Maneja de forma centralizada un intento de codigo EQUIVOCADO (al armar o
 // desarmar, por teclado o serial). Cuenta el fallo en el modulo de alarma:
@@ -160,7 +160,7 @@ static void a_mayusculas(char* s) {
 //     alarma de INTRUSO (LED rojo) y aqui se muestra "!! INTRUSO !!" y se
 //     envia "ALARMA:INTRUSO" por serial.
 // NO emite el newline final: lo agrega el llamador (igual que en los bloques OK).
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static void reportar_codigo_incorrecto() {
 
     if (alarma_registrar_fallo()) {
@@ -177,20 +177,20 @@ static void reportar_codigo_incorrecto() {
 }
 
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // procesar_tecla_alarma(tecla)
 // Interpreta la tecla pulsada en el teclado fisico y ejecuta la accion correspondiente.
 //
 // Mapa de teclas:
-//   0-9  → acumular digito en el buffer del codigo de alarma
-//   A    → ARMAR la alarma de acceso (requiere codigo completo y correcto)
-//   B    → DESARMAR la alarma de acceso (requiere codigo correcto)
-//   C    → subir nivel del dimmer en 1 (max DIMMER_NIVEL_MAX = 10)
-//   D    → bajar nivel del dimmer en 1 (min 0)
-// ─────────────────────────────────────────────────────────────────────────────
+//   0-9  â†’ acumular digito en el buffer del codigo de alarma
+//   A    â†’ ARMAR la alarma de acceso (requiere codigo completo y correcto)
+//   B    â†’ DESARMAR la alarma de acceso (requiere codigo correcto)
+//   C    â†’ subir nivel del dimmer en 1 (max DIMMER_NIVEL_MAX = 10)
+//   D    â†’ bajar nivel del dimmer en 1 (min 0)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static void procesar_tecla_alarma(char tecla) {
 
-    // ── TECLA '*': INICIAR / CANCELAR MODO COMANDO ───────────────────────────
+    // â”€â”€ TECLA '*': INICIAR / CANCELAR MODO COMANDO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // '*' es el prefijo universal de comandos por teclado (ver COMANDOS_TECLADO.md).
     // Si ya estabamos en modo comando, '*' cancela y vuelve a modo normal.
     if (tecla == '*') {
@@ -209,7 +209,7 @@ static void procesar_tecla_alarma(char tecla) {
         return;
     }
 
-    // ── EN MODO COMANDO: acumular digitos / 'A' (separador) y ejecutar con '#'
+    // â”€â”€ EN MODO COMANDO: acumular digitos / 'A' (separador) y ejecutar con '#'
     if (modo_comando) {
         ultima_interaccion = 0;
 
@@ -236,15 +236,15 @@ static void procesar_tecla_alarma(char tecla) {
         return;
     }
 
-    // ── MODO NORMAL ──────────────────────────────────────────────────────────
+    // â”€â”€ MODO NORMAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Cualquier tecla pulsada cuenta como "interaccion activa".
     // Reiniciar el contador a 0 para que la temperatura NO pise la linea 1 del LCD
     // mientras el usuario esta en medio de digitar un codigo o ajustar el dimmer.
     ultima_interaccion = 0;
 
-    // ── DIGITOS 0-9 ─────────────────────────────────────────────────────────
+    // â”€â”€ DIGITOS 0-9 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // tecla >= '0' && tecla <= '9': comparacion con los codigos ASCII de los digitos.
-    // '0'=48, '9'=57 — el teclado entrega el caracter ASCII, no el valor numerico.
+    // '0'=48, '9'=57 â€” el teclado entrega el caracter ASCII, no el valor numerico.
     // Se evaluan primero para que el 'return' al final evite caer en los bloques A/B/C/D.
     if (tecla >= '0' && tecla <= '9') {
 
@@ -258,7 +258,7 @@ static void procesar_tecla_alarma(char tecla) {
             buffer_codigo[pos_codigo++] = tecla;
 
             // Agregar el terminador nulo en la nueva posicion (pos_codigo ya fue incrementado).
-            // '\0' marca el fin del string en C — sin esto, funciones como strcmp
+            // '\0' marca el fin del string en C â€” sin esto, funciones como strcmp
             // y alarma_verificar_codigo() leeran basura de memoria mas alla del codigo.
             buffer_codigo[pos_codigo]   = '\0';
 
@@ -286,18 +286,18 @@ static void procesar_tecla_alarma(char tecla) {
         return;
     }
 
-    // ── TECLA A: ARMAR alarma de acceso ──────────────────────────────────────
+    // â”€â”€ TECLA A: ARMAR alarma de acceso â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (tecla == 'A') {
 
         // Condicion doble con &&:
         //   1. pos_codigo == ALARMA_CODIGO_LEN: el usuario ingreso exactamente 4 digitos.
         //   2. alarma_verificar_codigo(buffer_codigo): el codigo ingresado es correcto.
-        // Si cualquiera de las dos falla, se muestra error — no se puede armar sin codigo completo.
+        // Si cualquiera de las dos falla, se muestra error â€” no se puede armar sin codigo completo.
         if (pos_codigo == ALARMA_CODIGO_LEN && alarma_verificar_codigo(buffer_codigo)) {
             alarma_armar();               // habilitar INT2/INT3 y encender LED verde
             alarma_reset_intentos();      // codigo correcto: limpiar contador anti-intrusos
             lcd_goto(0, 0);              // ir a linea 0 (exclusiva del estado de alarma)
-            lcd_string("ALARMA: ARMADA  "); // 16 caracteres exactos — llena la linea completa
+            lcd_string("ALARMA: ARMADA  "); // 16 caracteres exactos â€” llena la linea completa
             usart_enviar_string("OK:ARMADA"); // confirmar por serial
         } else {
             // Codigo equivocado: contar el fallo (puede disparar la alarma de intruso)
@@ -310,7 +310,7 @@ static void procesar_tecla_alarma(char tecla) {
         pos_codigo = 0;           // reiniciar el indice de escritura
         buffer_codigo[0] = '\0';  // marcar el buffer como string vacio
 
-    // ── TECLA B: DESARMAR alarma de acceso ───────────────────────────────────
+    // â”€â”€ TECLA B: DESARMAR alarma de acceso â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     } else if (tecla == 'B') {
 
         // Misma logica de validacion que tecla A: codigo completo Y correcto.
@@ -318,7 +318,7 @@ static void procesar_tecla_alarma(char tecla) {
             alarma_desarmar();            // deshabilitar INT2/INT3, apagar LEDs rojo y verde
             alarma_reset_intentos();      // codigo correcto: limpiar contador anti-intrusos
             lcd_goto(0, 0);
-            lcd_string("ALARMA: DESACTIV"); // 16 caracteres — llena la linea 0 completamente
+            lcd_string("ALARMA: DESACTIV"); // 16 caracteres â€” llena la linea 0 completamente
             usart_enviar_string("OK:DESACTIVADA");
         } else {
             // Codigo equivocado: contar el fallo (puede disparar la alarma de intruso)
@@ -330,7 +330,7 @@ static void procesar_tecla_alarma(char tecla) {
         pos_codigo = 0;
         buffer_codigo[0] = '\0';
 
-    // ── TECLA C: SUBIR nivel del dimmer en 1 ─────────────────────────────────
+    // â”€â”€ TECLA C: SUBIR nivel del dimmer en 1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     } else if (tecla == 'C') {
 
         // Leer el nivel actual y sumarle 1 para calcular el nuevo valor.
@@ -344,9 +344,9 @@ static void procesar_tecla_alarma(char tecla) {
         dimmer_set(nuevo_nivel); // aplicar el nuevo nivel al registro OCR1A del Timer1
 
         // Mostrar el nivel de luz en la mitad DERECHA de la linea 1 (columnas 9-15).
-        // lcd_goto(1, 9): linea 1, columna 9 — no pisa la temperatura en columnas 0-8.
+        // lcd_goto(1, 9): linea 1, columna 9 â€” no pisa la temperatura en columnas 0-8.
         lcd_goto(1, 9);
-        lcd_string("       ");   // 7 espacios: borra TODO lo que había antes en esa zona
+        lcd_string("       ");   // 7 espacios: borra TODO lo que habÃ­a antes en esa zona
         lcd_goto(1, 9);           // volver al inicio de esa zona
         lcd_string("L:");
         lcd_int(dimmer_get());
@@ -357,10 +357,10 @@ static void procesar_tecla_alarma(char tecla) {
         usart_enviar_int(dimmer_get()); // enviar el numero como texto ASCII (ej. "7")
         usart_enviar_newline();
 
-    // ── TECLA D: BAJAR nivel del dimmer en 1 ─────────────────────────────────
+    // â”€â”€ TECLA D: BAJAR nivel del dimmer en 1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     } else if (tecla == 'D') {
 
-        // int16_t en lugar de uint8_t para poder detectar el caso nivel=0 → nivel-1=-1.
+        // int16_t en lugar de uint8_t para poder detectar el caso nivel=0 â†’ nivel-1=-1.
         // Con uint8_t, 0-1 daria 255 (desbordamiento de entero sin signo) en lugar de -1.
         // int16_t permite el valor negativo, que luego se clampea a 0.
         int16_t nuevo_nivel = (int16_t)dimmer_get() - 1;
@@ -368,12 +368,12 @@ static void procesar_tecla_alarma(char tecla) {
         // Clampear al minimo 0: si el resultado fue negativo, forzarlo a 0.
         if (nuevo_nivel < 0) nuevo_nivel = 0;
 
-        // (uint8_t): cast de vuelta a uint8_t — ya sabemos que el valor es 0-9 aqui,
+        // (uint8_t): cast de vuelta a uint8_t â€” ya sabemos que el valor es 0-9 aqui,
         // el cast es seguro y dimmer_set() espera uint8_t.
         dimmer_set((uint8_t)nuevo_nivel);
 
         lcd_goto(1, 9);
-        lcd_string("       ");   // 7 espacios: borra TODO lo que había antes en esa zona
+        lcd_string("       ");   // 7 espacios: borra TODO lo que habÃ­a antes en esa zona
         lcd_goto(1, 9);           // volver al inicio de esa zona
         lcd_string("L:");
         lcd_int(dimmer_get());
@@ -388,7 +388,7 @@ static void procesar_tecla_alarma(char tecla) {
 }
 
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // texto_a_numero(s)
 // Convierte una cadena de digitos ASCII a su valor numerico como uint8_t.
 // Reemplazo de atoi() de <stdlib.h> para mantener el proyecto sin dependencias
@@ -405,7 +405,7 @@ static void procesar_tecla_alarma(char tecla) {
 // LIMITE: uint8_t maximo = 255. Numeros mayores se truncan silenciosamente.
 //         Para LUZ:0-10 y GARAJE esto no es un problema, pero el llamador
 //         debe ser consciente del limite si se usa para temperaturas altas.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static uint8_t texto_a_numero(const char* s) {
 
     uint8_t resultado = 0; // acumulador inicializado en 0 antes de procesar digitos
@@ -427,25 +427,25 @@ static uint8_t texto_a_numero(const char* s) {
 }
 
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // procesar_comando_serial(comando)
 // Parsea y ejecuta el comando recibido por USART0 (ya convertido a mayusculas).
 //
 // PROTOCOLO (separar cadena con prefijos fijos):
-//   "ARM:xxxx"       → armar alarma de acceso (requiere codigo, RF-04)
-//   "DISARM:xxxx"    → desarmar con codigo de 4 digitos
-//   "LUZ:N"          → ajustar dimmer a nivel N (0-10)
-//   "GARAJE:ABRIR"   → abrir garaje (motor PAP horario)
-//   "GARAJE:CERRAR"  → cerrar garaje (motor PAP antihorario)
+//   "ARM:xxxx"       â†’ armar alarma de acceso (requiere codigo, RF-04)
+//   "DISARM:xxxx"    â†’ desarmar con codigo de 4 digitos
+//   "LUZ:N"          â†’ ajustar dimmer a nivel N (0-10)
+//   "GARAJE:ABRIR"   â†’ abrir garaje (motor PAP horario)
+//   "GARAJE:CERRAR"  â†’ cerrar garaje (motor PAP antihorario)
 //
 // strncmp(s1, s2, n): compara los primeros n caracteres de s1 y s2.
 //   Retorna 0 si son iguales, != 0 si difieren.
 //   Se usa 'n' igual al largo del prefijo para no necesitar que el comando
 //   termine exactamente ahi (util para comandos con argumentos como "LUZ:7").
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static void procesar_comando_serial(char* comando) {
 
-    // ── ARM:xxxx ─────────────────────────────────────────────────────────────
+    // â”€â”€ ARM:xxxx â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // El enunciado exige que la alarma se ACTIVE y DESACTIVE solo con codigo.
     // Por eso armar por serial requiere el codigo: "ARM:1234" (igual que la
     // tecla 'A' del teclado, que tambien valida el codigo antes de armar).
@@ -465,14 +465,14 @@ static void procesar_comando_serial(char* comando) {
             // Codigo incorrecto: contar el fallo (puede disparar la alarma de intruso)
             reportar_codigo_incorrecto();
         }
-        usart_enviar_newline(); // \r\n — necesario para que la terminal muestre nueva linea
+        usart_enviar_newline(); // \r\n â€” necesario para que la terminal muestre nueva linea
 
-    // ── DISARM:xxxx ──────────────────────────────────────────────────────────
+    // â”€â”€ DISARM:xxxx â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // strncmp(..., "DISARM:", 7): verificar el prefijo de 7 caracteres "DISARM:".
     } else if (strncmp(comando, "DISARM:", 7) == 0) {
 
         // Extraer el codigo que viene inmediatamente despues del prefijo "DISARM:".
-        // 'comando + 7': aritmetica de punteros — avanza el puntero 7 posiciones.
+        // 'comando + 7': aritmetica de punteros â€” avanza el puntero 7 posiciones.
         //   Si comando apunta a "DISARM:1234", entonces comando+7 apunta a "1234".
         //   No se copia el string, solo se obtiene un puntero a la parte relevante.
         char* codigo_recibido = comando + 7;
@@ -483,7 +483,7 @@ static void procesar_comando_serial(char* comando) {
             alarma_desarmar();           // deshabilitar INT2/INT3, apagar LEDs rojo y verde
             alarma_reset_intentos();     // codigo correcto: limpiar contador anti-intrusos
             lcd_goto(0, 0);
-            lcd_string("ALARMA: DESACTIV"); // 16 chars — llena la linea 0
+            lcd_string("ALARMA: DESACTIV"); // 16 chars â€” llena la linea 0
             usart_enviar_string("OK:DESACTIVADA");
         } else {
             // Codigo incorrecto: contar el fallo (puede disparar la alarma de intruso)
@@ -491,19 +491,19 @@ static void procesar_comando_serial(char* comando) {
         }
         usart_enviar_newline();
 
-    // ── LUZ:N ────────────────────────────────────────────────────────────────
+    // â”€â”€ LUZ:N â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // strncmp(..., "LUZ:", 4): verificar el prefijo de 4 caracteres "LUZ:".
     } else if (strncmp(comando, "LUZ:", 4) == 0) {
 
         // Escala 0-10 por limitacion visual de Proteus (ver dimmer.cpp para explicacion).
         // 'comando + 4': saltar los 4 caracteres de "LUZ:" y apuntar al numero.
-        //   Ejemplo: "LUZ:7" → comando+4 apunta a "7" → texto_a_numero retorna 7.
+        //   Ejemplo: "LUZ:7" â†’ comando+4 apunta a "7" â†’ texto_a_numero retorna 7.
         uint8_t nivel = texto_a_numero(comando + 4);
 
         dimmer_set(nivel); // aplicar el nivel al Timer1 OCR1A
 
         // Marcar interaccion: evitar que la temperatura pise el nivel de luz en LCD.
-        // El usuario acaba de ajustar la luz — debe poder verla al menos TIEMPO_MOSTRAR
+        // El usuario acaba de ajustar la luz â€” debe poder verla al menos TIEMPO_MOSTRAR
         // ciclos antes de que T: vuelva a aparecer en la misma linea.
         ultima_interaccion = 0;
 
@@ -519,7 +519,7 @@ static void procesar_comando_serial(char* comando) {
         usart_enviar_int(dimmer_get());  // enviar el nivel aplicado realmente
         usart_enviar_newline();
 
-    // ── GARAJE:ABRIR ─────────────────────────────────────────────────────────
+    // â”€â”€ GARAJE:ABRIR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // strncmp(..., "GARAJE:ABRIR", 12): verificar el prefijo de 12 caracteres.
     } else if (strncmp(comando, "GARAJE:ABRIR", 12) == 0) {
 
@@ -527,7 +527,7 @@ static void procesar_comando_serial(char* comando) {
         // (~2.5 segundos). El usuario debe saber que el comando fue aceptado
         // aunque tarde en completarse.
         lcd_goto(1, 0);
-        lcd_string("GARAJE ABRIENDO "); // 16 chars — ocupa toda la linea 1 temporalmente
+        lcd_string("GARAJE ABRIENDO "); // 16 chars â€” ocupa toda la linea 1 temporalmente
         usart_enviar_string("OK:GARAJE_ABRIENDO");
         usart_enviar_newline();
 
@@ -542,7 +542,7 @@ static void procesar_comando_serial(char* comando) {
         usart_enviar_string("OK:GARAJE_ABIERTO");
         usart_enviar_newline();
 
-    // ── GARAJE:CERRAR ────────────────────────────────────────────────────────
+    // â”€â”€ GARAJE:CERRAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // strncmp(..., "GARAJE:CERRAR", 13): prefijo de 13 caracteres.
     } else if (strncmp(comando, "GARAJE:CERRAR", 13) == 0) {
 
@@ -645,7 +645,7 @@ static void procesar_comando_serial(char* comando) {
 
 
 
-    // ── COMANDO DESCONOCIDO ───────────────────────────────────────────────────
+    // â”€â”€ COMANDO DESCONOCIDO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     } else {
         // Ningun prefijo conocido coincidio. Reportar el error sin tomar accion.
         // El usuario puede ver el mensaje en la terminal y corregir el comando.
@@ -655,13 +655,13 @@ static void procesar_comando_serial(char* comando) {
 }
 
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // producto_por_codigo(cod)
 // Catalogo fijo de productos del mercado para el entrenador (sin terminal no se
 // pueden teclear nombres). Cada producto tiene un codigo numerico de 2 digitos.
 // Retorna el nombre (string en Flash) o NULL si el codigo no existe.
 // Para agregar productos, ampliar este switch y la tabla en COMANDOS_TECLADO.md.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static const char* producto_por_codigo(uint8_t cod) {
     switch (cod) {
         case 1:  return "leche";
@@ -679,20 +679,20 @@ static const char* producto_por_codigo(uint8_t cod) {
 }
 
 
-// ─────────────────────────────────────────────────────────────────────────────
-// (mostrar_mercado_lcd ELIMINADA) — el listado del mercado ahora va por la
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// (mostrar_mercado_lcd ELIMINADA) â€” el listado del mercado ahora va por la
 // terminal serial de forma NO bloqueante (ver case 59 en ejecutar_comando_teclado).
 // Se quito porque su version con _delay_ms congelaba todo el sistema mientras
-// listaba (no respondian teclado ni alarmas) — justo el bug reportado.
-// ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
+// listaba (no respondian teclado ni alarmas) â€” justo el bug reportado.
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // ejecutar_comando_teclado(cmd)
 // Interpreta y ejecuta un comando capturado en modo teclado. Formato:
 //   <FF><param1>[A<param2>]   donde FF = codigo de funcion de 2 digitos.
 // La tecla 'A' separa el primer parametro del segundo (horno y mercado-add).
 // Reutiliza las MISMAS funciones de modulo que el parser serial.
 // Ver la tabla completa de combinaciones en COMANDOS_TECLADO.md.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static void ejecutar_comando_teclado(char* cmd) {
 
     // Medir el largo del comando tecleado
@@ -719,7 +719,7 @@ static void ejecutar_comando_teclado(char* cmd) {
 
     switch (func) {
 
-        // ── 1x GARAJE ────────────────────────────────────────────────────────
+        // â”€â”€ 1x GARAJE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 11: // abrir
             lcd_goto(1, 0); lcd_string("GARAJE ABRIENDO ");
             usart_enviar_string("OK:GARAJE_ABRIENDO"); usart_enviar_newline();
@@ -735,7 +735,7 @@ static void ejecutar_comando_teclado(char* cmd) {
             usart_enviar_string("OK:GARAJE_CERRADO"); usart_enviar_newline();
             break;
 
-        // ── 2x SONIDO ────────────────────────────────────────────────────────
+        // â”€â”€ 2x SONIDO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 21: // encender + volumen (p1 = 0-100)
             sonido_encender(p1);
             lcd_goto(0, 0); lcd_string("SONIDO ON       ");
@@ -748,7 +748,7 @@ static void ejecutar_comando_teclado(char* cmd) {
             usart_enviar_string("OK:SONIDO_OFF"); usart_enviar_newline();
             break;
 
-        // ── 3x HORNO ─────────────────────────────────────────────────────────
+        // â”€â”€ 3x HORNO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 31: // encender (p1 = temp, p2 = minutos)
             horno_encender(p1, p2);
             lcd_goto(0, 0); lcd_string("HORNO: ON       ");
@@ -762,7 +762,7 @@ static void ejecutar_comando_teclado(char* cmd) {
             usart_enviar_string("OK:HORNO_OFF"); usart_enviar_newline();
             break;
 
-        // ── 4x LUZ (dimmer por valor directo) ────────────────────────────────
+        // â”€â”€ 4x LUZ (dimmer por valor directo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 41: // fijar nivel (p1 = 0-10)
             dimmer_set(p1);
             lcd_goto(1, 9); lcd_string("       ");
@@ -771,7 +771,7 @@ static void ejecutar_comando_teclado(char* cmd) {
             usart_enviar_int(dimmer_get()); usart_enviar_newline();
             break;
 
-        // ── 5x MERCADO (catalogo por codigo) ─────────────────────────────────
+        // â”€â”€ 5x MERCADO (catalogo por codigo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 51: { // agregar (p1 = codigo producto, p2 = cantidad)
             const char* nom = producto_por_codigo(p1);
             if (nom == NULL) {
@@ -811,7 +811,7 @@ static void ejecutar_comando_teclado(char* cmd) {
             mercado_listar();
             break;
 
-        // ── 9x ALARMA (armar/desarmar con codigo) ────────────────────────────
+        // â”€â”€ 9x ALARMA (armar/desarmar con codigo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 91: // armar (args = codigo de 4 digitos, ej. *91 1234 #)
             if (alarma_verificar_codigo(args)) {
                 alarma_armar();
@@ -835,7 +835,7 @@ static void ejecutar_comando_teclado(char* cmd) {
             usart_enviar_newline();
             break;
 
-        // ── CODIGO NO RECONOCIDO ─────────────────────────────────────────────
+        // â”€â”€ CODIGO NO RECONOCIDO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         default:
             lcd_goto(0, 0); lcd_string("CMD DESCONOCIDO ");
             usart_enviar_string("ERROR:CMD_TECLADO");
@@ -845,19 +845,19 @@ static void ejecutar_comando_teclado(char* cmd) {
 }
 
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // setup()
-// Funcion especial de Arduino — se ejecuta UNA sola vez al encender o resetear.
+// Funcion especial de Arduino â€” se ejecuta UNA sola vez al encender o resetear.
 // Inicializa todos los modulos en el orden correcto y deja el sistema listo.
 // REGLA: sei() SIEMPRE al final de los init(), nunca antes.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void setup() {
 
     lcd_init();       // Fase 1: configura Puerto A como salida y ejecuta la secuencia HD44780
     teclado_init();   // Fase 2: configura Puerto L (cols), Puerto C (filas) y Timer2 CTC
     usart_init();     // Fase 3: configura USART0 9600 bps 8N1 y habilita ISR de recepcion
     alarma_init();    // Fase 5: configura LEDs PB6/PB7, EICRA/EICRB, habilita INT4/INT5
-    adc_init();       // ADC compartido (AVCC, prescaler 128) — temp ADC9 (A9) + volumen ADC13 (A13)
+    adc_init();       // ADC compartido (AVCC, prescaler 128) â€” temp ADC9 (A9) + volumen ADC13 (A13)
     motor_init();     // Fase 6a: SERVO del garaje, Timer4 PWM 50Hz en OC4A (PH3/D6)
     temp_init();      // Fase 6b: pines calefactor PK3 (A11) y ventilador PK4 (A12)
     dimmer_init();    // Fase 6c: configura Timer1 Fast PWM en OC1A (PB5/D11)
@@ -871,10 +871,10 @@ void setup() {
     //   - alarma_init() configuro EIMSK con INT4/INT5 habilitados
     //   - usart_init() configuro RXCIE0 (ISR de recepcion serial habilitada)
     // Si sei() se llamara ANTES, cualquiera de esas ISR podria dispararse mientras
-    // otro modulo aun esta configurando sus registros → comportamiento indefinido.
+    // otro modulo aun esta configurando sus registros â†’ comportamiento indefinido.
     sei();
 
-    lcd_clear(); // borrar pantalla y mover cursor a (0,0) — limpia cualquier basura de inicio
+    lcd_clear(); // borrar pantalla y mover cursor a (0,0) â€” limpia cualquier basura de inicio
 
     lcd_goto(0, 0);              // posicionar cursor en linea 0, columna 0
     lcd_string("ALARMA: DESACTIV"); // estado inicial de la alarma en la linea dedicada (16 chars)
@@ -892,21 +892,21 @@ void setup() {
 }
 
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // loop()
-// Funcion especial de Arduino — se llama repetidamente de forma infinita
+// Funcion especial de Arduino â€” se llama repetidamente de forma infinita
 // despues de setup(). Cada iteracion ("vuelta del loop") revisa todos los
 // subsistemas y atiende los eventos pendientes.
 //
 // ORDEN DE PRIORIDAD (de mayor a menor urgencia):
-//   1. Alarmas    — seguridad critica, siempre primero
-//   2. Teclado    — interaccion del usuario fisica
-//   3. Serial     — comandos remotos
-//   4. Temperatura — actualizacion periodica, menos urgente
-// ─────────────────────────────────────────────────────────────────────────────
+//   1. Alarmas    â€” seguridad critica, siempre primero
+//   2. Teclado    â€” interaccion del usuario fisica
+//   3. Serial     â€” comandos remotos
+//   4. Temperatura â€” actualizacion periodica, menos urgente
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 void loop() {
 
-    // ── 1. ALARMAS (Fase 5) ──────────────────────────────────────────────────
+    // â”€â”€ 1. ALARMAS (Fase 5) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // alarma_actualizar(): revisa si las ISR (INT2-INT5) dejaron alguna bandera activa.
     // Retorna 1 si hubo un evento NUEVO que reportar en esta vuelta, 0 si no.
     // El if consume el evento: la proxima vuelta del loop no volvera a reportarlo
@@ -922,7 +922,7 @@ void loop() {
         // Responder segun el tipo de evento detectado
         if (tipo == ALARMA_TIPO_INCENDIO) {
             lcd_goto(0, 0);              // linea 0: exclusiva del estado de alarma
-            lcd_string("!! INCENDIO !!  "); // 16 chars — exclamaciones llaman la atencion
+            lcd_string("!! INCENDIO !!  "); // 16 chars â€” exclamaciones llaman la atencion
             usart_enviar_string("ALARMA:INCENDIO"); // alerta a la terminal remota
             usart_enviar_newline();
 
@@ -936,7 +936,7 @@ void loop() {
         // (eso se garantiza dentro de alarma.cpp), asi que no hay caso else aqui.
     }
 
-    // ── 2. TECLADO (Fase 2 + logica de alarma/dimmer) ────────────────────────
+    // â”€â”€ 2. TECLADO (Fase 2 + logica de alarma/dimmer) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // teclado_hay(): retorna 1 si la ISR del Timer2 deposito una tecla nueva.
     //   Se verifica ANTES de leer para no llamar teclado_leer() sin tecla disponible
     //   (que retornaria '\0' y podria interpretarse como una pulsacion vacia).
@@ -951,7 +951,7 @@ void loop() {
         procesar_tecla_alarma(tecla);
     }
 
-    // ── 3. COMANDOS SERIALES (Fase 3) ────────────────────────────────────────
+    // â”€â”€ 3. COMANDOS SERIALES (Fase 3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // usart_hay_linea(): retorna 1 si el buffer circular de RX tiene un '\n' o '\r'.
     //   Una linea completa indica que el usuario termino de escribir el comando.
     if (usart_hay_linea()) {
@@ -972,14 +972,14 @@ void loop() {
         procesar_comando_serial(comando);
     }
 
-    // ── 3b. VOLUMEN DEL EQUIPO DE SONIDO (Fase 7) ────────────────────────────
+    // â”€â”€ 3b. VOLUMEN DEL EQUIPO DE SONIDO (Fase 7) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Si el equipo esta encendido, lee el potenciometro (A13/PK5) y ajusta el
     // volumen en tiempo real. No bloquea: solo lee el ADC y escribe el PWM.
     sonido_actualizar();
 
-    // ── 4. TEMPERATURA Y TEMPORIZADO (Fase 6) ────────────────────────────────
+    // â”€â”€ 4. TEMPERATURA Y TEMPORIZADO (Fase 6) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Incrementar los dos contadores en cada vuelta del loop.
-    // No se usan delays ni timers adicionales — el propio paso del tiempo
+    // No se usan delays ni timers adicionales â€” el propio paso del tiempo
     // del loop sirve como base de tiempo imprecisa pero funcional.
     contador_temp++;       // avanzar hacia el umbral de lectura de temperatura
     ultima_interaccion++;  // avanzar hacia el umbral de "usuario inactivo"
@@ -992,9 +992,9 @@ void loop() {
         // CONDICION DEL LCD: solo actualizar la mitad izquierda de la linea 1
         // si el usuario lleva suficientes ciclos sin interactuar con el codigo/luz.
         // Si ultima_interaccion < TIEMPO_MOSTRAR_INTERACCION, el usuario
-        // acaba de pulsar una tecla o ajustar la luz — NO pisar el mensaje en LCD.
+        // acaba de pulsar una tecla o ajustar la luz â€” NO pisar el mensaje en LCD.
         // IMPORTANTE: temp_controlar() (calefactor/ventilador) se ejecuta SIEMPRE
-        // independientemente de esta condicion — la seguridad termica no se puede
+        // independientemente de esta condicion â€” la seguridad termica no se puede
         // pausar solo porque el usuario este digitando un codigo.
         if (ultima_interaccion >= TIEMPO_MOSTRAR_INTERACCION) {
 
@@ -1005,13 +1005,13 @@ void loop() {
             // valor anterior de 3 digitos si ahora el valor es de 1 digito (ej. "T:5C").
             lcd_goto(1, 0);       // posicionar en linea 1, columna 0
             lcd_string("T:");     // prefijo de temperatura
-            lcd_int(temp_actual); // valor en °C: 1 o 2 digitos (rango 0-40°C en esta version)
+            lcd_int(temp_actual); // valor en Â°C: 1 o 2 digitos (rango 0-40Â°C en esta version)
             lcd_string("C   ");   // unidad + espacios para limpiar digitos sobrantes
         }
 
         // Evaluar umbrales con histeresis y actuar sobre calefactor (PK3) y ventilador (PK4).
         // Se llama despues del bloque LCD para que temp_celsius() ya fue llamado
-        // (aunque temp_controlar() hace su propia llamada interna — es redundante
+        // (aunque temp_controlar() hace su propia llamada interna â€” es redundante
         //  pero claro: cada modulo es responsable de su propia lectura).
         temp_controlar();
     }
@@ -1024,3 +1024,4 @@ void loop() {
         usart_enviar_newline();
     }
 }
+
