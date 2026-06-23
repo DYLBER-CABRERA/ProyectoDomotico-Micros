@@ -1,5 +1,5 @@
 // acceso.cpp — implementación pendiente (Fase 4)
-#include "acceso.h"
+#include "../include/acceso.h"
 
 void acceso_init()             { /* TODO Fase 4 */ }
 void acceso_abrir_principal()  { /* TODO */ }

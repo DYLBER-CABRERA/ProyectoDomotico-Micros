@@ -15,7 +15,7 @@
 
 // lcd.h → incluye las definiciones de pines y los prototipos
 //          de las funciones públicas de este módulo
-#include "lcd.h"
+#include "../include/lcd.h"
 
 
 // ============================================================

@@ -17,7 +17,7 @@
 
 // Incluir el propio header — importa las definiciones de pines
 // y los prototipos de las funciones públicas
-#include "teclado.h"
+#include "../include/teclado.h"
 
 
 // ============================================================

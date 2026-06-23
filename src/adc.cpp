@@ -1,7 +1,7 @@
 // adc.cpp - Lectura ADC compartida (registros directos ATmega2560)
 
 #include <avr/io.h>
-#include "adc.h"
+#include "../include/adc.h"
 
 
 // -- adc_init() ---------------------------------------------------------------

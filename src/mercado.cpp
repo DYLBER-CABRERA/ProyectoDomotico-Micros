@@ -4,7 +4,7 @@
 #include <avr/io.h>
 #include <avr/eeprom.h>
 #include <string.h>
-#include "mercado.h"
+#include "../include/mercado.h"
 
 
 // -- Funcion interna: calcular direccion de un slot ---------------------

@@ -3,7 +3,7 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include "alarma.h"
+#include "../include/alarma.h"
 
 
 // -- Variables internas (privadas de este modulo) ----------------------

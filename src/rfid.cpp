@@ -1,5 +1,5 @@
 // rfid.cpp — implementación pendiente (Fase 4)
-#include "rfid.h"
+#include "../include/rfid.h"
 
 void rfid_init()                              { /* TODO Fase 4 */ }
 uint8_t rfid_hay_tarjeta()                    { return 0; }

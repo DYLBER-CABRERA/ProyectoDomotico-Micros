@@ -3,7 +3,7 @@
 // Rango ajustado a 0-10 por limitacion visual confirmada en Proteus
 
 #include <avr/io.h>
-#include "dimmer.h"
+#include "../include/dimmer.h"
 
 
 static uint8_t nivel_actual = 0;

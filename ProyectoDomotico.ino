@@ -27,27 +27,27 @@
 #include <util/delay.h>
 
 // Modulos activos del proyecto — cada header expone solo la API publica del modulo
-#include "lcd.h"         // lcd_init, lcd_goto, lcd_string, lcd_int, lcd_char, lcd_clear
-#include "teclado.h"     // teclado_init, teclado_hay, teclado_leer
-#include "usart.h"       // usart_init, usart_enviar_*, usart_hay_linea, usart_leer_linea
-#include "alarma.h"      // alarma_init/armar/desarmar/actualizar, ALARMA_TIPO_*, ALARMA_CODIGO_LEN
-#include "adc.h"         // adc_init, adc_leer (ADC compartido: temperatura y volumen)
-#include "motor.h"       // motor_init, garaje_abrir, garaje_cerrar (servo)
-#include "temperatura.h" // temp_init, temp_celsius, temp_controlar
-#include "dimmer.h"      // dimmer_init, dimmer_set, dimmer_get, DIMMER_NIVEL_MAX
-#include "horno.h"
-#include "sonido.h"
-#include "mercado.h"
+#include "include/lcd.h"         // lcd_init, lcd_goto, lcd_string, lcd_int, lcd_char, lcd_clear
+#include "include/teclado.h"     // teclado_init, teclado_hay, teclado_leer
+#include "include/usart.h"       // usart_init, usart_enviar_*, usart_hay_linea, usart_leer_linea
+#include "include/alarma.h"      // alarma_init/armar/desarmar/actualizar, ALARMA_TIPO_*, ALARMA_CODIGO_LEN
+#include "include/adc.h"         // adc_init, adc_leer (ADC compartido: temperatura y volumen)
+#include "include/motor.h"       // motor_init, garaje_abrir, garaje_cerrar (servo)
+#include "include/temperatura.h" // temp_init, temp_celsius, temp_controlar
+#include "include/dimmer.h"      // dimmer_init, dimmer_set, dimmer_get, DIMMER_NIVEL_MAX
+#include "include/horno.h"
+#include "include/sonido.h"
+#include "include/mercado.h"
 // Fases siguientes — comentados hasta que se implemente cada modulo.
 // Cuando una fase este lista: descomentar el include correspondiente,
 // llamar a su _init() en setup() y su _actualizar() en loop().
-// #include "spi_master.h"  // Fase 4: bus SPI para el modulo RC522 RFID
-// #include "rfid.h"        // Fase 4: lectura de tarjetas RFID
-// #include "eeprom_mgr.h"  // Fase 4: UIDs autorizados en EEPROM interna
-// #include "acceso.h"      // Fase 4: logica de acceso por tarjeta
-// #include "horno.h"       // Fase 7: control remoto del horno
-// #include "sonido.h"      // Fase 7: control del equipo de sonido
-// #include "mercado.h"     // Fase 7: lista de mercado
+// #include "include/spi_master.h"  // Fase 4: bus SPI para el modulo RC522 RFID
+// #include "include/rfid.h"        // Fase 4: lectura de tarjetas RFID
+// #include "include/eeprom_mgr.h"  // Fase 4: UIDs autorizados en EEPROM interna
+// #include "include/acceso.h"      // Fase 4: logica de acceso por tarjeta
+// #include "include/horno.h"       // Fase 7: control remoto del horno
+// #include "include/sonido.h"      // Fase 7: control del equipo de sonido
+// #include "include/mercado.h"     // Fase 7: lista de mercado
 
 
 // ─── VARIABLES Y CONSTANTES DEL MODULO ──────────────────────────────────────

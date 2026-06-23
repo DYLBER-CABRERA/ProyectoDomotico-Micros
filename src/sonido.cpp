@@ -3,8 +3,8 @@
 // PWM en Timer3 canal A (OC3A, PE3, pin 5)
 
 #include <avr/io.h>
-#include "sonido.h"
-#include "adc.h"   // lectura del potenciometro de volumen (ADC13 / PK5 / A13)
+#include "../include/sonido.h"
+#include "../include/adc.h"   // lectura del potenciometro de volumen (ADC13 / PK5 / A13)
 
 
 static uint8_t estado_sonido   = SONIDO_APAGADO;

@@ -1,5 +1,5 @@
 // eeprom_mgr.cpp — implementación pendiente (Fase 4)
-#include "eeprom_mgr.h"
+#include "../include/eeprom_mgr.h"
 
 void eeprom_init()                           { /* TODO Fase 4 */ }
 void eeprom_escribir(uint16_t dir, uint8_t d){ /* TODO */ }

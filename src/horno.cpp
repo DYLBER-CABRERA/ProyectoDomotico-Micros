@@ -2,7 +2,7 @@
 // Sin librerias - registros directos ATmega2560
 
 #include <avr/io.h>
-#include "horno.h"
+#include "../include/horno.h"
 
 
 // -- Variables internas (privadas de este modulo) ----------------------

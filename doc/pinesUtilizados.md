@@ -1,6 +1,8 @@
 ---
 title: Mapa de Pines — Sistema Domótico ATmega2560 (Arduino Mega 2560)
 ---
+
+```mermaid
 graph LR
 
     %% ─────────────────────────────────────────────────────────────

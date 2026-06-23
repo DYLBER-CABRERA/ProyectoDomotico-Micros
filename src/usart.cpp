@@ -4,7 +4,7 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include "usart.h"
+#include "../include/usart.h"
 
 
 // -- Buffer circular de recepcion ------------------------------------

@@ -2,7 +2,7 @@
 // Sin librerias - registros directos ATmega2560
 
 #include <avr/io.h>
-#include "motor.h"
+#include "../include/motor.h"
 
 
 // -- Estado interno del garaje -------------------------------------------

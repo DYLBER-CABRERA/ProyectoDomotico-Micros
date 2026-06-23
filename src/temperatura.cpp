@@ -3,8 +3,8 @@
 // Canal ADC9 (PK1 / pin A9). Conectar el potenciometro a A9 (NO A8).
 
 #include <avr/io.h>
-#include "temperatura.h"
-#include "adc.h"   // ADC compartido (el potenciometro de temperatura esta en ADC9)
+#include "../include/temperatura.h"
+#include "../include/adc.h"   // ADC compartido (el potenciometro de temperatura esta en ADC9)
 
 
 // -- temp_init() -----------------------------------------------------------

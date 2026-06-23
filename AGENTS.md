@@ -22,7 +22,7 @@ el confort de una vivienda:
 - **Confort**: iluminación dimerizada, control de temperatura (calefactor + ventilador),
   horno remoto, equipo de sonido con volumen analógico y lista de mercado persistente.
 
-El enunciado oficial está en [`Proyecto_2026-1.md`](Proyecto_2026-1.md). La traducción a
+El enunciado oficial está en [`doc/Proyecto_2026-1.md`](doc/Proyecto_2026-1.md). La traducción a
 requisitos verificables está en [`specs/001-requisitos.md`](specs/001-requisitos.md).
 
 ---
@@ -31,11 +31,17 @@ requisitos verificables está en [`specs/001-requisitos.md`](specs/001-requisito
 
 ```
 ProyectoDomotico.ino     # setup() + loop() + parser de comandos serial (orquestador)
-<modulo>.h / <modulo>.cpp # un par por subsistema; el .h expone solo la API pública
-pinesUtilizados.mermaid  # diagrama del mapa de pines
-Manual_ProyectoDomotico.md  # manual de usuario / pruebas en Proteus (referencia)
+src/<modulo>.cpp          # implementación de cada módulo (un .cpp por subsistema)
+include/<modulo>.h       # APIs públicas de cada módulo (expone solo lo necesario)
+doc/                     # documentación de usuario y diagramas
+  pinesUtilizados.md     #   mapa de pines (diagrama mermaid)
+  Manual_ProyectoDomotico.md  #   manual de usuario / pruebas en Proteus
+  MAPEO_PINES.md         #   tabla de pines detallada
+  COMANDOS_TECLADO.md    #   catálogo de comandos por teclado
+  Proyecto_2026-1.md     #   enunciado oficial del proyecto
 build/                   # artefactos de compilación (.hex para Proteus) — NO editar a mano
-AGENTS.md                # este archivo
+AGENTS.md                # este archivo (punto de entrada para agentes)
+README.md                # descripción general del proyecto
 specs/                   # especificaciones SDD (fuente de verdad del diseño)
 ```
 
@@ -55,7 +61,7 @@ Módulos: `lcd`, `teclado`, `usart`, `alarma`, `motor`, `temperatura`, `dimmer`,
 - **arduino-cli**:
   `arduino-cli compile --fqbn arduino:avr:mega:cpu=atmega2560 .`
 - **Simulación**: cargar el `.hex` en el ATmega2560 de **Proteus** (clock 16 MHz).
-  El plan de pruebas manual está en `Manual_ProyectoDomotico.md` §7.
+  El plan de pruebas manual está en `doc/Manual_ProyectoDomotico.md` §7.
 - **Serial**: 9600 bps, 8N1. Terminal virtual con TX/RX **cruzados**.
 
 No existen pruebas automatizadas (es firmware sobre hardware simulado). La verificación
@@ -99,7 +105,7 @@ es: (1) que compile sin warnings de pines, (2) las pruebas manuales en Proteus.
 | Timer3 / OC3A (PE3/D5) | Sonido | PWM volumen → RC; LED equipo en PH6 (D9) |
 | Horno | LED rele | PH5 (D8) — corregido (DEF-001) |
 
-> Mapa completo y actualizado en **`MAPEO_PINES.md`** (raíz). PG0–PG3 quedaron libres al
+> Mapa completo y actualizado en **`doc/MAPEO_PINES.md`**. PG0–PG3 quedaron libres al
 > pasar el garaje a servo.
 
 ISRs: `INT2/INT3/INT4/INT5_vect` (alarma), `TIMER2_COMPA_vect` (teclado),
@@ -120,7 +126,7 @@ MERCADO:ADD,nombre,cant | MERCADO:DEL,nombre | MERCADO:LIST
 
 **Teclado (entrenador sin terminal)**: cada función tiene secuencia `* ‹código2díg›
 ‹params› #` (`A` separa params). Ej.: sonido 75% = `*2175#`, horno 180°C/25min =
-`*31180A25#`, garaje abrir = `*11#`. Tablas completas en `COMANDOS_TECLADO.md`.
+`*31180A25#`, garaje abrir = `*11#`. Tablas completas en `doc/COMANDOS_TECLADO.md`.
 
 Alertas automáticas: `ALARMA:INCENDIO`, `ALARMA:ACCESO`, `HORNO:FIN`.
 El parser está en `procesar_comando_serial()` dentro del `.ino`. Todo comando nuevo se
