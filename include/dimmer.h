@@ -20,6 +20,7 @@
 #include <avr/io.h>
 
 #define DIMMER_DDR    DDRB
+#define DIMMER_PORT   PORTB
 #define DIMMER_PIN    PB5    // OC1A, pin 11
 
 // Rango util del dimmer (escala de usuario)

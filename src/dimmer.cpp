@@ -12,35 +12,20 @@ static uint8_t nivel_actual = 0;
 // -- dimmer_init() -----------------------------------------------------------
 void dimmer_init() {
 
-    // Configurar PB5 (OC1A) como SALIDA. El modulo Compare del Timer1 necesita
-    // que el pin sea salida para que la senal PWM generada internamente llegue
-    // al exterior. Si el pin fuera entrada, el timer calcularia el duty cycle
-    // pero no habria senal visible en el pin.
-    DIMMER_DDR |= (1 << DIMMER_PIN);
+    DIMMER_DDR  |= (1 << DIMMER_PIN);
+    DIMMER_PORT &= ~(1 << DIMMER_PIN); // pin LOW desde el inicio (nivel 0 = apagado real)
 
-    // TCCR1A: registro de control A del Timer1
-    // COM1A1=1, COM1A0=0 → "Clear OC1A on Compare Match, Set at BOTTOM"
-    //   = PWM no-invertido: OC1A sube a HIGH cuando el contador llega a 0 (BOTTOM)
-    //     y baja a LOW cuando el contador iguala OCR1A.
-    //     Resultado: duty cycle = OCR1A / 255
-    // WGM10=1 → bit bajo del selector de modo de onda (WGM).
-    //   Combinado con WGM12 en TCCR1B forma el modo 5 (Fast PWM 8-bit):
-    //   TOP=0xFF=255, el contador cuenta 0→255 y se reinicia automaticamente.
-    TCCR1A = (1 << COM1A1) | (1 << WGM10);
+    // TCCR1A: WGM10=1 activa Fast PWM 8-bit (junto con WGM12 en TCCR1B).
+    // COM1A1 empieza en 0 (OC1A desconectado del timer) porque nivel=0 y el
+    // Fast PWM con OCR1A=0 genera un pulso estrecho (~1 ciclo) que hace brillar
+    // levemente el LED. Al desconectar el pin del timer se elimina ese pulso.
+    TCCR1A = (1 << WGM10); // COM1A1=0: OC1A desconectado, pin queda en LOW
 
-    // TCCR1B: registro de control B del Timer1
-    // WGM12=1 → bit alto del selector WGM. Junto con WGM10=1 → modo 5 Fast PWM 8-bit.
-    // CS11=1  → prescaler 8. Frecuencia de la PWM:
-    //   f_PWM = F_CPU / (prescaler * (TOP+1)) = 16.000.000 / (8 * 256) ≈ 7812 Hz
-    //   A ~7.8kHz el ojo humano no percibe parpadeo en el LED (umbral es ~50Hz).
-    //   Usar prescaler=1 daria ~62kHz, innecesario; prescaler=64 daria ~977Hz, aceptable.
+    // Fast PWM 8-bit, prescaler 8 → ~7812 Hz (sin parpadeo visible)
     TCCR1B = (1 << WGM12) | (1 << CS11);
 
-    // OCR1A: Output Compare Register del canal A
-    // En Fast PWM 8-bit: duty cycle = OCR1A / 255
-    // OCR1A=0 → 0% duty cycle → LED completamente apagado al inicio del programa
     OCR1A = 0;
-    nivel_actual = 0; // sincronizar la variable de nivel interno con OCR1A=0
+    nivel_actual = 0;
 }
 
 
@@ -50,15 +35,10 @@ void dimmer_init() {
 // de brillo SI es visible en la simulacion de Proteus (0% a ~8% duty).
 void dimmer_set(uint8_t nivel) {
 
-    if (nivel > DIMMER_NIVEL_MAX) nivel = DIMMER_NIVEL_MAX; // saturar: no superar el maximo
+    if (nivel > DIMMER_NIVEL_MAX) nivel = DIMMER_NIVEL_MAX;
 
-    nivel_actual = nivel; // guardar el nivel para que dimmer_get() lo pueda reportar
+    nivel_actual = nivel;
 
-    // TABLA DE BRILLO PERCEPTUAL (curva logaritmica/gamma).
-    // El duty crece de forma ~exponencial para que el cambio de brillo se vea
-    // PAREJO entre niveles (el ojo percibe el brillo de forma logaritmica).
-    //   indice = nivel (0-10) -> valor de OCR1A (0-255 = 0%-100% de duty)
-    // Cada paso multiplica aprox. x1.7 el anterior. Ajustable a gusto.
     static const uint8_t curva[DIMMER_NIVEL_MAX + 1] = {
         0,    // 0  -> apagado
         2,    // 1
@@ -73,7 +53,19 @@ void dimmer_set(uint8_t nivel) {
         255   // 10 -> brillo maximo
     };
 
-    OCR1A = curva[nivel]; // aplicar el valor de la curva al duty cycle
+    if (nivel == 0) {
+        // Desconectar OC1A del timer (COM1A1=0) y forzar pin a LOW.
+        // Con OCR1A=0 en Fast PWM no-inversor el ATmega2560 genera un pulso
+        // estrecho (~1 ciclo de reloj) en cada periodo que hace brillar el LED.
+        // La unica forma de evitarlo es desconectar el pin del modulo compare.
+        TCCR1A &= ~(1 << COM1A1);
+        DIMMER_PORT &= ~(1 << DIMMER_PIN); // pin LOW = LED completamente apagado
+        OCR1A = 0;
+    } else {
+        // Reconectar OC1A al timer (COM1A1=1) y aplicar el duty cycle de la curva
+        TCCR1A |= (1 << COM1A1);
+        OCR1A = curva[nivel];
+    }
 }
 
 
