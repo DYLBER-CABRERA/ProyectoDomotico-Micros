@@ -1,9 +1,9 @@
-// dimmer.cpp - Control de iluminacion dimerizada via PWM (Timer1 canal A)
+﻿// dimmer.cpp - Control de iluminacion dimerizada via PWM (Timer1 canal A)
 // Sin librerias - registros directos ATmega2560
 // Rango ajustado a 0-10 por limitacion visual confirmada en Proteus
 
 #include <avr/io.h>
-#include "dimmer.h"
+#include "../include/dimmer.h"
 
 
 static uint8_t nivel_actual = 0;
@@ -19,26 +19,26 @@ void dimmer_init() {
     DIMMER_DDR |= (1 << DIMMER_PIN);
 
     // TCCR1A: registro de control A del Timer1
-    // COM1A1=1, COM1A0=0 → "Clear OC1A on Compare Match, Set at BOTTOM"
+    // COM1A1=1, COM1A0=0 â†’ "Clear OC1A on Compare Match, Set at BOTTOM"
     //   = PWM no-invertido: OC1A sube a HIGH cuando el contador llega a 0 (BOTTOM)
     //     y baja a LOW cuando el contador iguala OCR1A.
     //     Resultado: duty cycle = OCR1A / 255
-    // WGM10=1 → bit bajo del selector de modo de onda (WGM).
+    // WGM10=1 â†’ bit bajo del selector de modo de onda (WGM).
     //   Combinado con WGM12 en TCCR1B forma el modo 5 (Fast PWM 8-bit):
-    //   TOP=0xFF=255, el contador cuenta 0→255 y se reinicia automaticamente.
+    //   TOP=0xFF=255, el contador cuenta 0â†’255 y se reinicia automaticamente.
     TCCR1A = (1 << COM1A1) | (1 << WGM10);
 
     // TCCR1B: registro de control B del Timer1
-    // WGM12=1 → bit alto del selector WGM. Junto con WGM10=1 → modo 5 Fast PWM 8-bit.
-    // CS11=1  → prescaler 8. Frecuencia de la PWM:
-    //   f_PWM = F_CPU / (prescaler * (TOP+1)) = 16.000.000 / (8 * 256) ≈ 7812 Hz
+    // WGM12=1 â†’ bit alto del selector WGM. Junto con WGM10=1 â†’ modo 5 Fast PWM 8-bit.
+    // CS11=1  â†’ prescaler 8. Frecuencia de la PWM:
+    //   f_PWM = F_CPU / (prescaler * (TOP+1)) = 16.000.000 / (8 * 256) â‰ˆ 7812 Hz
     //   A ~7.8kHz el ojo humano no percibe parpadeo en el LED (umbral es ~50Hz).
     //   Usar prescaler=1 daria ~62kHz, innecesario; prescaler=64 daria ~977Hz, aceptable.
     TCCR1B = (1 << WGM12) | (1 << CS11);
 
     // OCR1A: Output Compare Register del canal A
     // En Fast PWM 8-bit: duty cycle = OCR1A / 255
-    // OCR1A=0 → 0% duty cycle → LED completamente apagado al inicio del programa
+    // OCR1A=0 â†’ 0% duty cycle â†’ LED completamente apagado al inicio del programa
     OCR1A = 0;
     nivel_actual = 0; // sincronizar la variable de nivel interno con OCR1A=0
 }
@@ -81,3 +81,4 @@ void dimmer_set(uint8_t nivel) {
 uint8_t dimmer_get() {
     return nivel_actual;
 }
+

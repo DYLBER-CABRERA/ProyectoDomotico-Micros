@@ -1,10 +1,10 @@
-// usart.cpp - Driver USART0 ATmega2560
+﻿// usart.cpp - Driver USART0 ATmega2560
 // Sin librerias - registros directos
 // 9600 bps, 8N1, ISR de recepcion con buffer circular
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include "usart.h"
+#include "../include/usart.h"
 
 
 // -- Buffer circular de recepcion ------------------------------------
@@ -244,3 +244,4 @@ uint8_t usart_leer_linea(char* dest) {
     dest[n] = '\0';
     return n;
 }
+

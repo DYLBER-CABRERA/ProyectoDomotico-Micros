@@ -1,9 +1,9 @@
-// alarma.cpp - Maquina de estados de alarmas (acceso + incendio)
+﻿// alarma.cpp - Maquina de estados de alarmas (acceso + incendio)
 // Sin librerias - registros directos ATmega2560
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include "alarma.h"
+#include "../include/alarma.h"
 
 
 // -- Variables internas (privadas de este modulo) ----------------------
@@ -253,3 +253,4 @@ uint8_t alarma_intentos_restantes() {
          ? (ALARMA_MAX_INTENTOS - intentos_fallidos)
          : 0;
 }
+

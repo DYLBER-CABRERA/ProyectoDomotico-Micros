@@ -1,8 +1,8 @@
-// horno.cpp - Control remoto del horno
+﻿// horno.cpp - Control remoto del horno
 // Sin librerias - registros directos ATmega2560
 
 #include <avr/io.h>
-#include "horno.h"
+#include "../include/horno.h"
 
 
 // -- Variables internas (privadas de este modulo) ----------------------
@@ -109,3 +109,4 @@ uint16_t horno_segundos_restantes() {
 uint8_t horno_temp_objetivo() {
     return temp_objetivo;
 }
+
