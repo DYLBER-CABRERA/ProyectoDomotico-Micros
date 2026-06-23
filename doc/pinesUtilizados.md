@@ -1,34 +1,34 @@
-﻿---
-title: Mapa de Pines — Sistema Domótico ATmega2560 (Arduino Mega 2560)
+---
+title: Mapa de Pines � Sistema Dom�tico ATmega2560 (Arduino Mega 2560)
 ---
 
 ```mermaid
 graph LR
 
-    %% ─────────────────────────────────────────────────────────────
+    %% -------------------------------------------------------------
     %% LEYENDA DE COLORES
     %%   Verde claro  = SALIDA  (DDR bit = 1, el Mega controla el pin)
     %%   Azul claro   = ENTRADA (DDR bit = 0, el Mega lee el pin)
-    %%   Amarillo     = ENTRADA ADC (pin analógico, va al módulo ADC)
+    %%   Amarillo     = ENTRADA ADC (pin anal�gico, va al m�dulo ADC)
     %%   Naranja      = PWM/Timer (salida especial del hardware de Timer)
-    %%   Violeta      = Periférico externo
-    %% ─────────────────────────────────────────────────────────────
+    %%   Violeta      = Perif�rico externo
+    %% -------------------------------------------------------------
     classDef salida  fill:#C8E6C9,stroke:#2E7D32,color:#000,font-weight:bold
     classDef entrada fill:#BBDEFB,stroke:#1565C0,color:#000,font-weight:bold
     classDef adc     fill:#FFF9C4,stroke:#F9A825,color:#000,font-weight:bold
     classDef pwm     fill:#FFE0B2,stroke:#E65100,color:#000,font-weight:bold
     classDef periph  fill:#EDE7F6,stroke:#4527A0,color:#000
 
-    subgraph G_LCD["FASE 1 · LCD 16×2 HD44780"]
+    subgraph G_LCD["FASE 1 � LCD 16�2 HD44780"]
         direction LR
-        LCD["LCD 16×2\nHD44780\nVCC=5V · RW→GND"]:::periph
-        subgraph PA["PUERTO A — DDRA=0xFF (todo salidas)"]
-            PA0["PA0 · D22 · SALIDA\nLCD RS (Register Select)"]:::salida
-            PA2["PA2 · D24 · SALIDA\nLCD EN (Enable)"]:::salida
-            PA4["PA4 · D26 · SALIDA\nLCD D4"]:::salida
-            PA5["PA5 · D27 · SALIDA\nLCD D5"]:::salida
-            PA6["PA6 · D28 · SALIDA\nLCD D6"]:::salida
-            PA7["PA7 · D29 · SALIDA\nLCD D7"]:::salida
+        LCD["LCD 16�2\nHD44780\nVCC=5V � RW?GND"]:::periph
+        subgraph PA["PUERTO A � DDRA=0xFF (todo salidas)"]
+            PA0["PA0 � D22 � SALIDA\nLCD RS (Register Select)"]:::salida
+            PA2["PA2 � D24 � SALIDA\nLCD EN (Enable)"]:::salida
+            PA4["PA4 � D26 � SALIDA\nLCD D4"]:::salida
+            PA5["PA5 � D27 � SALIDA\nLCD D5"]:::salida
+            PA6["PA6 � D28 � SALIDA\nLCD D6"]:::salida
+            PA7["PA7 � D29 � SALIDA\nLCD D7"]:::salida
         end
         PA0 --> LCD
         PA2 --> LCD
@@ -38,20 +38,20 @@ graph LR
         PA7 --> LCD
     end
 
-    subgraph G_TEC["FASE 2 · Teclado Matricial 4×4 (barrido por Timer2)"]
+    subgraph G_TEC["FASE 2 � Teclado Matricial 4�4 (barrido por Timer2)"]
         direction LR
-        TEC["Teclado\nMatricial 4×4"]:::periph
-        subgraph PL["PUERTO L (bits 0-3) — COLUMNAS SALIDA\nEstado reposo: HIGH · Activa: LOW"]
-            PL0["PL0 · D49 · SALIDA\nColumna 0 → teclas 1,4,7,*"]:::salida
-            PL1["PL1 · D48 · SALIDA\nColumna 1 → teclas 2,5,8,0"]:::salida
-            PL2["PL2 · D47 · SALIDA\nColumna 2 → teclas 3,6,9,#"]:::salida
-            PL3["PL3 · D46 · SALIDA\nColumna 3 → teclas A,B,C,D"]:::salida
+        TEC["Teclado\nMatricial 4�4"]:::periph
+        subgraph PL["PUERTO L (bits 0-3) � COLUMNAS SALIDA\nEstado reposo: HIGH � Activa: LOW"]
+            PL0["PL0 � D49 � SALIDA\nColumna 0 ? teclas 1,4,7,*"]:::salida
+            PL1["PL1 � D48 � SALIDA\nColumna 1 ? teclas 2,5,8,0"]:::salida
+            PL2["PL2 � D47 � SALIDA\nColumna 2 ? teclas 3,6,9,#"]:::salida
+            PL3["PL3 � D46 � SALIDA\nColumna 3 ? teclas A,B,C,D"]:::salida
         end
-        subgraph PC_T["PUERTO C (bits 0-3) — FILAS ENTRADA con pull-up interno\nPin sin tecla=HIGH · Pin con tecla=LOW"]
-            PC0["PC0 · D37 · ENTRADA+PU\nFila 0 → teclas 1,2,3,A"]:::entrada
-            PC1["PC1 · D36 · ENTRADA+PU\nFila 1 → teclas 4,5,6,B"]:::entrada
-            PC2["PC2 · D35 · ENTRADA+PU\nFila 2 → teclas 7,8,9,C"]:::entrada
-            PC3["PC3 · D34 · ENTRADA+PU\nFila 3 → teclas *,0,#,D"]:::entrada
+        subgraph PC_T["PUERTO C (bits 0-3) � FILAS ENTRADA con pull-up interno\nPin sin tecla=HIGH � Pin con tecla=LOW"]
+            PC0["PC0 � D37 � ENTRADA+PU\nFila 0 ? teclas 1,2,3,A"]:::entrada
+            PC1["PC1 � D36 � ENTRADA+PU\nFila 1 ? teclas 4,5,6,B"]:::entrada
+            PC2["PC2 � D35 � ENTRADA+PU\nFila 2 ? teclas 7,8,9,C"]:::entrada
+            PC3["PC3 � D34 � ENTRADA+PU\nFila 3 ? teclas *,0,#,D"]:::entrada
         end
         PL0 -->|barrido| TEC
         PL1 -->|barrido| TEC
@@ -63,53 +63,53 @@ graph LR
         TEC -->|lectura| PC3
     end
 
-    subgraph G_US["FASE 3 · USART0 — Comunicación Serial"]
+    subgraph G_US["FASE 3 � USART0 � Comunicaci�n Serial"]
         direction LR
         VT["Virtual Terminal\n(Proteus) / Monitor Serial\n9600 bps 8N1"]:::periph
-        subgraph PE_US["PUERTO E — USART0 (hardware dedicado)"]
-            PE0["PE0 · D0 · ENTRADA\nRX0 ← TXD de la terminal\n(conectar TX terminal → RX0 Mega)"]:::entrada
-            PE1["PE1 · D1 · SALIDA\nTX0 → RXD de la terminal\n(conectar TX0 Mega → RX terminal)"]:::salida
+        subgraph PE_US["PUERTO E � USART0 (hardware dedicado)"]
+            PE0["PE0 � D0 � ENTRADA\nRX0 ? TXD de la terminal\n(conectar TX terminal ? RX0 Mega)"]:::entrada
+            PE1["PE1 � D1 � SALIDA\nTX0 ? RXD de la terminal\n(conectar TX0 Mega ? RX terminal)"]:::salida
         end
-        PE1 -->|"TX→RXD (cruzado)"| VT
-        VT -->|"TXD→RX (cruzado)"| PE0
+        PE1 -->|"TX?RXD (cruzado)"| VT
+        VT -->|"TXD?RX (cruzado)"| PE0
     end
 
-    subgraph G_AL["FASE 5 · Sistema de Alarma (Acceso + Incendio)"]
+    subgraph G_AL["FASE 5 � Sistema de Alarma (Acceso + Incendio)"]
         direction TB
-        subgraph PD_AL["PUERTO D — INT2/INT3 · Sensores de ACCESO\n(habilitar con alarma_armar())"]
-            PD2["PD2 · D19 · ENTRADA\nINT2 · SW1 Puerta Principal\nR10kΩ a GND · flanco subida"]:::entrada
-            PD3["PD3 · D18 · ENTRADA\nINT3 · SW2 Ventana / Garaje\nR10kΩ a GND · flanco subida"]:::entrada
+        subgraph PD_AL["PUERTO D � INT2/INT3 � Sensores de ACCESO\n(habilitar con alarma_armar())"]
+            PD2["PD2 � D19 � ENTRADA\nINT2 � SW1 Puerta Principal\nR10kO a GND � flanco subida"]:::entrada
+            PD3["PD3 � D18 � ENTRADA\nINT3 � SW2 Ventana / Garaje\nR10kO a GND � flanco subida"]:::entrada
         end
-        subgraph PE_AL["PUERTO E — INT4/INT5 · Sensores de HUMO/INCENDIO\n(SIEMPRE activos desde alarma_init())"]
-            PE4["PE4 · D2 · ENTRADA\nINT4 · SW3 Humo Zona 1 (ej. cocina)\nR10kΩ a GND · flanco subida"]:::entrada
-            PE5["PE5 · D3 · ENTRADA\nINT5 · SW4 Humo Zona 2 (ej. garaje)\nR10kΩ a GND · flanco subida"]:::entrada
+        subgraph PE_AL["PUERTO E � INT4/INT5 � Sensores de HUMO/INCENDIO\n(SIEMPRE activos desde alarma_init())"]
+            PE4["PE4 � D2 � ENTRADA\nINT4 � SW3 Humo Zona 1 (ej. cocina)\nR10kO a GND � flanco subida"]:::entrada
+            PE5["PE5 � D3 � ENTRADA\nINT5 � SW4 Humo Zona 2 (ej. garaje)\nR10kO a GND � flanco subida"]:::entrada
         end
-        subgraph PB_AL["PUERTO B — LEDs indicadores de estado"]
-            PB6["PB6 · D12 · SALIDA\nLED Verde — Alarma ARMADA\n+R220Ω en serie a GND"]:::salida
-            PB7["PB7 · D13 · SALIDA\nLED Rojo — Alarma DISPARADA\n+R220Ω en serie a GND"]:::salida
+        subgraph PB_AL["PUERTO B � LEDs indicadores de estado"]
+            PB6["PB6 � D12 � SALIDA\nLED Verde � Alarma ARMADA\n+R220O en serie a GND"]:::salida
+            PB7["PB7 � D13 � SALIDA\nLED Rojo � Alarma DISPARADA\n+R220O en serie a GND"]:::salida
         end
         SW1["DIP-SW1\nSensor Puerta"]:::periph
         SW2["DIP-SW2\nSensor Ventana"]:::periph
         SW3["DIP-SW3\nSensor Humo 1"]:::periph
         SW4["DIP-SW4\nSensor Humo 2"]:::periph
-        LEDV["LED Verde\n+R220Ω"]:::periph
-        LEDR["LED Rojo\n+R220Ω"]:::periph
-        SW1 -->|"R10kΩ→GND"| PD2
-        SW2 -->|"R10kΩ→GND"| PD3
-        SW3 -->|"R10kΩ→GND"| PE4
-        SW4 -->|"R10kΩ→GND"| PE5
+        LEDV["LED Verde\n+R220O"]:::periph
+        LEDR["LED Rojo\n+R220O"]:::periph
+        SW1 -->|"R10kO?GND"| PD2
+        SW2 -->|"R10kO?GND"| PD3
+        SW3 -->|"R10kO?GND"| PE4
+        SW4 -->|"R10kO?GND"| PE5
         PB6 --> LEDV
         PB7 --> LEDR
     end
 
-    subgraph G_MOT["FASE 6a · Motor Paso a Paso — Garaje"]
+    subgraph G_MOT["FASE 6a � Motor Paso a Paso � Garaje"]
         direction LR
-        MOT["Motor PAP\n+ Driver ULN2003\n(el driver maneja corriente,\nel Mega da señales 5V)"]:::periph
-        subgraph PG["PUERTO G (bits 0-3) — BOBINAS SALIDA"]
-            PG0["PG0 · D41 · SALIDA · IN1"]:::salida
-            PG1["PG1 · D40 · SALIDA · IN2"]:::salida
-            PG2["PG2 · D39 · SALIDA · IN3"]:::salida
-            PG3["PG3 · D38 · SALIDA · IN4"]:::salida
+        MOT["Motor PAP\n+ Driver ULN2003\n(el driver maneja corriente,\nel Mega da se�ales 5V)"]:::periph
+        subgraph PG["PUERTO G (bits 0-3) � BOBINAS SALIDA"]
+            PG0["PG0 � D41 � SALIDA � IN1"]:::salida
+            PG1["PG1 � D40 � SALIDA � IN2"]:::salida
+            PG2["PG2 � D39 � SALIDA � IN3"]:::salida
+            PG3["PG3 � D38 � SALIDA � IN4"]:::salida
         end
         PG0 --> MOT
         PG1 --> MOT
@@ -117,35 +117,35 @@ graph LR
         PG3 --> MOT
     end
 
-    subgraph G_TMP["FASE 6b · Control de Temperatura"]
+    subgraph G_TMP["FASE 6b � Control de Temperatura"]
         direction LR
-        POT["Potenciómetro 10kΩ\n(simula sensor de\ntemperatura 0-40°C)"]:::periph
+        POT["Potenci�metro 10kO\n(simula sensor de\ntemperatura 0-40�C)"]:::periph
         CAL["LED Rojo\nCalefactor\nON si temp menor 18C"]:::periph
         VEN["LED Azul\nVentilador\nON si temp mayor 26C"]:::periph
-        subgraph PK["PUERTO K — ADC9 + Actuadores"]
-            PK1["PK1 · A9 · ENTRADA-ADC9\nPotenciómetro temperatura\nADC: REFS=AVCC · Prescaler=128\n⚠ Conectar POT a A9 (no A8)"]:::adc
-            PK3["PK3 · A11 · SALIDA\nCalefactor (LED rojo)\nON cuando temp menor 18°C"]:::salida
-            PK4["PK4 · A12 · SALIDA\nVentilador (LED azul)\nON cuando temp mayor 26°C"]:::salida
+        subgraph PK["PUERTO K � ADC9 + Actuadores"]
+            PK1["PK1 � A9 � ENTRADA-ADC9\nPotenci�metro temperatura\nADC: REFS=AVCC � Prescaler=128\n? Conectar POT a A9 (no A8)"]:::adc
+            PK3["PK3 � A11 � SALIDA\nCalefactor (LED rojo)\nON cuando temp menor 18�C"]:::salida
+            PK4["PK4 � A12 � SALIDA\nVentilador (LED azul)\nON cuando temp mayor 26�C"]:::salida
         end
         POT --> PK1
         PK3 --> CAL
         PK4 --> VEN
     end
 
-    subgraph G_DIM["FASE 6c · Dimmer Iluminación (PWM Timer1)"]
+    subgraph G_DIM["FASE 6c � Dimmer Iluminaci�n (PWM Timer1)"]
         direction LR
-        LEDIM["LED / Lámpara\ndimerizable\nnivel 0-10\nvía teclado (C/D)\no comando LUZ:N"]:::periph
-        subgraph PB_DIM["PUERTO B — OC1A (salida hardware del Timer1)"]
-            PB5["PB5 · D11 · SALIDA-PWM\nOC1A · Timer1 Fast PWM 8-bit\nDimmer nivel 0-10"]:::pwm
+        LEDIM["LED / L�mpara\ndimerizable\nnivel 0-10\nv�a teclado (C/D)\no comando LUZ:N"]:::periph
+        subgraph PB_DIM["PUERTO B � OC1A (salida hardware del Timer1)"]
+            PB5["PB5 � D11 � SALIDA-PWM\nOC1A � Timer1 Fast PWM 8-bit\nDimmer nivel 0-10"]:::pwm
         end
         PB5 --> LEDIM
     end
 
     subgraph G_INT["RECURSOS INTERNOS ATmega2560 (sin pin externo)"]
         direction TB
-        T1["TIMER 1 — Fast PWM 8-bit\nCS=8 · f≈7812Hz · OC1A→PB5\nUso: Dimmer iluminación"]:::pwm
-        T2["TIMER 2 — CTC\nPrescaler=1024 · OCR2A=155\nISR cada ~10ms\nUso: barrido teclado"]:::pwm
-        INT_V["VECTORES DE INTERRUPCIÓN\nINT2 (PD2) → Sensor acceso puerta\nINT3 (PD3) → Sensor acceso ventana\nINT4 (PE4) → Sensor humo zona 1\nINT5 (PE5) → Sensor humo zona 2\nTIMER2_COMPA → Barrido teclado\nUSART0_RX → Buffer recepción serial"]:::entrada
-        ADC_B["MÓDULO ADC\nREFS = AVCC (5V)\nPrescaler = 128\nMUX5=1 + MUX=00001\nCanal efectivo: ADC9 (PK1·A9)\nLectura: promedio 8 muestras\nValor 0-1023 → 0-40°C"]:::adc
+        T1["TIMER 1 � Fast PWM 8-bit\nCS=8 � f�7812Hz � OC1A?PB5\nUso: Dimmer iluminaci�n"]:::pwm
+        T2["TIMER 2 � CTC\nPrescaler=1024 � OCR2A=155\nISR cada ~10ms\nUso: barrido teclado"]:::pwm
+        INT_V["VECTORES DE INTERRUPCI�N\nINT2 (PD2) ? Sensor acceso puerta\nINT3 (PD3) ? Sensor acceso ventana\nINT4 (PE4) ? Sensor humo zona 1\nINT5 (PE5) ? Sensor humo zona 2\nTIMER2_COMPA ? Barrido teclado\nUSART0_RX ? Buffer recepci�n serial"]:::entrada
+        ADC_B["M�DULO ADC\nREFS = AVCC (5V)\nPrescaler = 128\nMUX5=1 + MUX=00001\nCanal efectivo: ADC9 (PK1�A9)\nLectura: promedio 8 muestras\nValor 0-1023 ? 0-40�C"]:::adc
     end
 ```

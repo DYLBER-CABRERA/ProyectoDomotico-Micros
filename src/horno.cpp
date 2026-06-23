@@ -1,4 +1,4 @@
-﻿// horno.cpp - Control remoto del horno
+// horno.cpp - Control remoto del horno
 // Sin librerias - registros directos ATmega2560
 
 #include <avr/io.h>

@@ -1,4 +1,4 @@
-﻿// sonido.cpp - Control remoto del equipo de sonido
+// sonido.cpp - Control remoto del equipo de sonido
 // Sin librerias - registros directos ATmega2560
 // PWM en Timer3 canal A (OC3A, PE3, pin 5)
 

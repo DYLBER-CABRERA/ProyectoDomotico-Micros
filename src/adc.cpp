@@ -1,4 +1,4 @@
-﻿// adc.cpp - Lectura ADC compartida (registros directos ATmega2560)
+// adc.cpp - Lectura ADC compartida (registros directos ATmega2560)
 
 #include <avr/io.h>
 #include "../include/adc.h"

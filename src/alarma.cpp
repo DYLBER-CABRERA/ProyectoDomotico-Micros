@@ -1,4 +1,4 @@
-﻿// alarma.cpp - Maquina de estados de alarmas (acceso + incendio)
+// alarma.cpp - Maquina de estados de alarmas (acceso + incendio)
 // Sin librerias - registros directos ATmega2560
 
 #include <avr/io.h>
