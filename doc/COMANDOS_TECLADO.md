@@ -60,11 +60,17 @@ Estas funcionan en el modo normal, sin `*`, por ser las más frecuentes:
 | **Mercado: agregar** | `*` `51` `‹cod›` `A` `‹cant›` `#` | `*5101A2#` → leche ×2 | cod = producto (§4), cant = 0–255 |
 | **Mercado: eliminar** | `*` `50` `‹cod›` `#` | `*5001#` → quita leche | cod = producto (§4) |
 | **Mercado: listar (LCD)** | `*` `59` `#` | `*59#` | — (muestra la lista en el LCD) |
+| **Enrolar adulto** | `*` `61` `‹código›` `#` | `*611234#` | código alarma de 4 dígitos |
+| **Enrolar hijo** | `*` `62` `‹cupos›` `A` `‹código›` `#` | `*625A1234#` → 5 cupos | cupos + código alarma |
+| **Borrar tarjeta** | `*` `60` `‹código›` `#` | `*601234#` | código alarma de 4 dígitos |
 | **Alarma armar** | `*` `91` `‹código›` `#` | `*911234#` | código de 4 dígitos |
 | **Alarma desarmar** | `*` `90` `‹código›` `#` | `*901234#` | código de 4 dígitos |
 
 > El armado/desarmado por `*91`/`*90` es equivalente a las teclas directas `A`/`B`; se
 > incluye para tener todo bajo el mismo esquema. Ambos exigen el código (RF-04).
+>
+> Las funciones RFID (6x) también requieren el código de alarma para evitar que cualquier
+> persona enrole tarjetas.
 
 ### Memoria rápida de los códigos de función
 
@@ -74,6 +80,7 @@ Estas funcionan en el modo normal, sin `*`, por ser las más frecuentes:
 3x = HORNO       31 ON+temp+min · 30 OFF
 4x = LUZ         41 nivel directo (0-10)
 5x = MERCADO     51 agregar · 50 quitar · 59 listar
+6x = RFID        61 enrol adulto · 62 enrol hijo · 60 borrar
 9x = ALARMA      91 armar   · 90 desarmar
 ```
 
@@ -130,9 +137,11 @@ añadir la fila aquí.
 | Luz nivel fijo | `*41‹n›#` | `LUZ:‹n›` |
 | Garaje abrir/cerrar | `*11#` / `*10#` | `GARAJE:ABRIR` / `GARAJE:CERRAR` |
 | Sonido ON/OFF | `*21#` / `*20#` | `SONIDO:ON` / `SONIDO:OFF` (volumen por pot A13) |
-| Garaje | `*11#` / `*10#` | `GARAJE:ABRIR` / `GARAJE:CERRAR` (servo, no bloqueante) |
 | Horno ON/OFF | `*31‹t›A‹m›#` / `*30#` | `HORNO:‹t›,‹m›` |
 | Mercado +/−/lista | `*51‹c›A‹q›#` / `*50‹c›#` / `*59#` | `MERCADO:ADD,…` / `DEL,…` / `LIST` |
+| Enrol adulto | `*61‹cod›#` | `ENROL:ADULTO,‹cod›` |
+| Enrol hijo | `*62‹n›A‹cod›#` | `ENROL:HIJO,‹n›,‹cod›` |
+| Borrar tarjeta | `*60‹cod›#` | `BORRAR,‹cod›` |
 
 ---
 

@@ -8,6 +8,10 @@ deseado), y deben actualizarse en el mismo commit que cambie la API o el comport
 | LCD | [`lcd.md`](lcd.md) | 1 | ✅ |
 | Teclado | [`teclado.md`](teclado.md) | 2 | ✅ |
 | USART | [`usart.md`](usart.md) | 3 | ✅ |
+| SPI maestro | [`spi_master.md`](spi_master.md) | 4 | ✅ |
+| Gestor EEPROM | [`eeprom_mgr.md`](eeprom_mgr.md) | 4 | ✅ |
+| RFID RC522 | [`rfid.md`](rfid.md) | 4 | ✅ |
+| Acceso | [`acceso.md`](acceso.md) | 4 | ✅ |
 | Alarma | [`alarma.md`](alarma.md) | 5 | 🟡 |
 | Motor garaje | [`motor.md`](motor.md) | 6a | 🟡 |
 | Temperatura | [`temperatura.md`](temperatura.md) | 6b | ✅ |
@@ -15,7 +19,3 @@ deseado), y deben actualizarse en el mismo commit que cambie la API o el comport
 | Horno | [`horno.md`](horno.md) | 7a | 🐞 |
 | Sonido | [`sonido.md`](sonido.md) | 7b | ✅ |
 | Mercado | [`mercado.md`](mercado.md) | 7c | ✅ |
-
-Los módulos pendientes (RFID, acceso, SPI, EEPROM de UIDs) se especifican en
-[`../fase-04-rfid-acceso/`](../fase-04-rfid-acceso/) hasta que se implementen; al
-completarse se crearán sus specs aquí.

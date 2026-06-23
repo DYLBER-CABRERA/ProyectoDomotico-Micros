@@ -1,9 +1,9 @@
 # DEF-002 — Actuadores de acceso no coinciden con el enunciado
 
 - **Severidad**: Media (cumplimiento de requisito RF-07).
-- **Estado**: 🟡 Garaje **resuelto con servomotor** (coincide con el enunciado). Queda
-  pendiente solo la puerta principal por imán (Fase 4).
-- **Módulos**: `motor.*` (ahora servo), `acceso.*` (stub), Proteus.
+- **Estado**: ✅ **Resuelto**. Garaje = servomotor (Timer4/OC4A/PH3). Puerta principal =
+  imán/relé en **PG0 (D41)**, implementado en `acceso.cpp`. Cierre: 2026-06-23 (Fase 4).
+- **Módulos**: `motor.*` (servo), `acceso.*` (implementado), Proteus.
 
 ## Actualización (servo)
 
