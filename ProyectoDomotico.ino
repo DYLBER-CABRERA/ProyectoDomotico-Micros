@@ -216,6 +216,8 @@ static void procesar_tecla_alarma(char tecla) {
         // '#': ejecutar el comando acumulado y salir del modo comando
         if (tecla == '#') {
             modo_comando = 0;
+            lcd_goto(1, 0);
+            lcd_string("                "); // borrar el eco "CMD:31180A6..." de la fila 1
             ejecutar_comando_teclado(cmd_buffer);
             return;
         }
@@ -536,9 +538,9 @@ static void procesar_comando_serial(char* comando) {
         // (INT2-INT5) SI se ejecutan durante el _delay_ms() interno de motor_pasos().
         garaje_abrir();
 
-        // Informar que el movimiento termino
+        // Estado final en mitad derecha (cols 9-15) para que temp no lo pise
         lcd_goto(1, 0);
-        lcd_string("GARAJE ABIERTO  "); // 16 chars
+        lcd_string("         ABIERTO"); // 9 espacios + 7 chars en cols 9-15
         usart_enviar_string("OK:GARAJE_ABIERTO");
         usart_enviar_newline();
 
@@ -556,7 +558,7 @@ static void procesar_comando_serial(char* comando) {
         garaje_cerrar();
 
         lcd_goto(1, 0);
-        lcd_string("GARAJE CERRADO  "); // 16 chars
+        lcd_string("         CERRADO"); // 9 espacios + 7 chars en cols 9-15
         usart_enviar_string("OK:GARAJE_CERRADO");
         usart_enviar_newline();
 
@@ -577,8 +579,10 @@ static void procesar_comando_serial(char* comando) {
 
         horno_encender(temp, minutos);
 
-        lcd_goto(0, 0);
-        lcd_string("HORNO: ON       ");
+        lcd_goto(0, 0); lcd_string("HORNO:          "); // plantilla limpia 16 chars
+        lcd_goto(0, 6); lcd_int(temp); lcd_char('C');   // temperatura en col 6
+        lcd_goto(1, 9); lcd_string("       ");          // limpiar mitad derecha fila 1
+        lcd_goto(1, 9); lcd_int(minutos); lcd_string("min"); // minutos en cols 9+
 
         usart_enviar_string("OK:HORNO,");
         usart_enviar_int(temp);
@@ -589,20 +593,54 @@ static void procesar_comando_serial(char* comando) {
     } else if (strncmp(comando, "SONIDO:OFF", 10) == 0) {
 
         sonido_apagar();
-
+        lcd_goto(0, 0); lcd_string("SONIDO: OFF     ");
         usart_enviar_string("OK:SONIDO_OFF");
         usart_enviar_newline();
 
     } else if (strncmp(comando, "SONIDO:ON", 9) == 0) {
 
-        // El equipo se enciende por comando, pero el VOLUMEN lo fija el
-        // potenciometro (A0) en tiempo real. Se acepta "SONIDO:ON" o
-        // "SONIDO:ON,xx" (el numero, si viene, se ignora).
-        sonido_encender(0);
+        // "SONIDO:ON"    -> encender con el ultimo volumen (o 5 si es la primera vez)
+        // "SONIDO:ON,7"  -> encender al nivel 7 (0-10)
+        uint8_t nivel = (sonido_volumen() > 0) ? sonido_volumen() : 5;
+        char* coma = strchr(comando + 9, ',');
+        if (coma != NULL) nivel = texto_a_numero(coma + 1);
+        sonido_encender(nivel);
+
+        lcd_goto(0, 0); lcd_string("SONIDO: ON      ");
+        lcd_goto(1, 9); lcd_string("       ");           // limpiar mitad derecha
+        lcd_goto(1, 9); lcd_string("V:"); lcd_int(sonido_volumen()); lcd_string("/10");
 
         usart_enviar_string("OK:SONIDO_ON,");
-        usart_enviar_int(sonido_volumen()); // volumen real leido del potenciometro
+        usart_enviar_int(sonido_volumen());
         usart_enviar_newline();
+
+    } else if (strncmp(comando, "VOL:", 4) == 0) {
+
+        // VOL:+  -> sube 1 paso   VOL:-  -> baja 1 paso   VOL:N -> fija nivel N
+        // Solo funciona si el equipo de sonido esta encendido
+        if (sonido_estado() != SONIDO_ENCENDIDO) {
+            usart_enviar_string("ERROR:SONIDO_APAGADO");
+            usart_enviar_newline();
+        } else {
+            char* arg = comando + 4;
+            uint8_t nuevo;
+            if (*arg == '+') {
+                nuevo = sonido_volumen() + 1;
+            } else if (*arg == '-') {
+                int8_t v = (int8_t)sonido_volumen() - 1;
+                nuevo = (v < 0) ? 0 : (uint8_t)v;
+            } else {
+                nuevo = texto_a_numero(arg);
+            }
+            sonido_set_volumen(nuevo);
+
+            lcd_goto(1, 9); lcd_string("       ");
+            lcd_goto(1, 9); lcd_string("V:"); lcd_int(sonido_volumen()); lcd_string("/10");
+
+            usart_enviar_string("OK:VOL,");
+            usart_enviar_int(sonido_volumen());
+            usart_enviar_newline();
+        }
 
     } else if (strncmp(comando, "MERCADO:ADD,", 12) == 0) {
 
@@ -724,34 +762,63 @@ static void ejecutar_comando_teclado(char* cmd) {
             lcd_goto(1, 0); lcd_string("GARAJE ABRIENDO ");
             usart_enviar_string("OK:GARAJE_ABRIENDO"); usart_enviar_newline();
             garaje_abrir();
-            lcd_goto(1, 0); lcd_string("GARAJE ABIERTO  ");
+            lcd_goto(1, 0); lcd_string("         ABIERTO"); // cols 9-15
             usart_enviar_string("OK:GARAJE_ABIERTO"); usart_enviar_newline();
             break;
         case 10: // cerrar
             lcd_goto(1, 0); lcd_string("GARAJE CERRANDO ");
             usart_enviar_string("OK:GARAJE_CERRANDO"); usart_enviar_newline();
             garaje_cerrar();
-            lcd_goto(1, 0); lcd_string("GARAJE CERRADO  ");
+            lcd_goto(1, 0); lcd_string("         CERRADO"); // cols 9-15
             usart_enviar_string("OK:GARAJE_CERRADO"); usart_enviar_newline();
             break;
 
         // ── 2x SONIDO ────────────────────────────────────────────────────────
-        case 21: // encender + volumen (p1 = 0-100)
+        case 21: // encender con nivel (p1 = 0-10)
             sonido_encender(p1);
-            lcd_goto(0, 0); lcd_string("SONIDO ON       ");
+            lcd_goto(0, 0); lcd_string("SONIDO: ON      ");
+            lcd_goto(1, 9); lcd_string("       ");
+            lcd_goto(1, 9); lcd_string("V:"); lcd_int(sonido_volumen()); lcd_string("/10");
             usart_enviar_string("OK:SONIDO_ON,");
             usart_enviar_int(sonido_volumen()); usart_enviar_newline();
             break;
         case 20: // apagar
             sonido_apagar();
-            lcd_goto(0, 0); lcd_string("SONIDO OFF      ");
+            lcd_goto(0, 0); lcd_string("SONIDO: OFF     ");
             usart_enviar_string("OK:SONIDO_OFF"); usart_enviar_newline();
             break;
+        case 22: { // vol+ (sube 1 paso) — solo si el equipo esta encendido
+            if (sonido_estado() != SONIDO_ENCENDIDO) {
+                usart_enviar_string("ERROR:SONIDO_APAGADO"); usart_enviar_newline();
+            } else {
+                uint8_t vp = sonido_volumen() + 1;
+                sonido_set_volumen(vp);
+                lcd_goto(1, 9); lcd_string("       ");
+                lcd_goto(1, 9); lcd_string("V:"); lcd_int(sonido_volumen()); lcd_string("/10");
+                usart_enviar_string("OK:VOL,"); usart_enviar_int(sonido_volumen()); usart_enviar_newline();
+            }
+            break;
+        }
+        case 23: { // vol- (baja 1 paso) — solo si el equipo esta encendido
+            if (sonido_estado() != SONIDO_ENCENDIDO) {
+                usart_enviar_string("ERROR:SONIDO_APAGADO"); usart_enviar_newline();
+            } else {
+                int8_t vm = (int8_t)sonido_volumen() - 1;
+                sonido_set_volumen((vm < 0) ? 0 : (uint8_t)vm);
+                lcd_goto(1, 9); lcd_string("       ");
+                lcd_goto(1, 9); lcd_string("V:"); lcd_int(sonido_volumen()); lcd_string("/10");
+                usart_enviar_string("OK:VOL,"); usart_enviar_int(sonido_volumen()); usart_enviar_newline();
+            }
+            break;
+        }
 
         // ── 3x HORNO ─────────────────────────────────────────────────────────
         case 31: // encender (p1 = temp, p2 = minutos)
             horno_encender(p1, p2);
-            lcd_goto(0, 0); lcd_string("HORNO: ON       ");
+            lcd_goto(0, 0); lcd_string("HORNO:          "); // plantilla limpia
+            lcd_goto(0, 6); lcd_int(p1); lcd_char('C');     // temperatura en col 6
+            lcd_goto(1, 9); lcd_string("       ");          // limpiar mitad derecha fila 1
+            lcd_goto(1, 9); lcd_int(p2); lcd_string("min"); // minutos en cols 9+
             usart_enviar_string("OK:HORNO,");
             usart_enviar_int(p1); usart_enviar_string(",");
             usart_enviar_int(p2); usart_enviar_newline();
@@ -857,12 +924,12 @@ void setup() {
     teclado_init();   // Fase 2: configura Puerto L (cols), Puerto C (filas) y Timer2 CTC
     usart_init();     // Fase 3: configura USART0 9600 bps 8N1 y habilita ISR de recepcion
     alarma_init();    // Fase 5: configura LEDs PB6/PB7, EICRA/EICRB, habilita INT4/INT5
-    adc_init();       // ADC compartido (AVCC, prescaler 128) — temp ADC9 (A9) + volumen ADC13 (A13)
+    adc_init();       // ADC compartido (AVCC, prescaler 128) — temperatura en ADC9 (A9)
     motor_init();     // Fase 6a: SERVO del garaje, Timer4 PWM 50Hz en OC4A (PH3/D6)
     temp_init();      // Fase 6b: pines calefactor PK3 (A11) y ventilador PK4 (A12)
     dimmer_init();    // Fase 6c: configura Timer1 Fast PWM en OC1A (PB5/D11)
     horno_init();      // Fase 7a: LED horno en PH5 (pin 8)
-    sonido_init();     // Fase 7b: Timer3 PWM volumen (PE3/D5)->RC + LED PH6 (D9); pot volumen en A13 (PK5)
+    sonido_init();     // Fase 7b: Timer3 PWM volumen (PE3/D5)->RC + LED PH6 (D9); volumen por comando serial
     mercado_init();     // Fase 7c: lista de mercado en EEPROM (sin hardware)
 
     // sei(): habilita las interrupciones globales poniendo el bit I del SREG en 1.
@@ -880,13 +947,13 @@ void setup() {
     lcd_string("ALARMA: DESACTIV"); // estado inicial de la alarma en la linea dedicada (16 chars)
 
     lcd_goto(1, 0);              // posicionar cursor en linea 1, columna 0
-    lcd_string("T:--C   L:0/10"); // layout inicial: temperatura placeholder + luz en 0
+    lcd_string("T:--C    L:0/10 "); // "L" en col 9 (igual que lcd_goto(1,9) en updates de luz)
 
     usart_enviar_newline(); // linea en blanco para separar el encabezado en la terminal
     // Enviar el menu de comandos disponibles a la terminal al encender
     usart_enviar_string("Comandos: ARM:xxxx / DISARM:xxxx / LUZ:0-10 / GARAJE:ABRIR / GARAJE:CERRAR");
     usart_enviar_newline();
-    usart_enviar_string("HORNO:temp,min / SONIDO:ON (vol por pot A0) / SONIDO:OFF / MERCADO:ADD,nom,cant / MERCADO:DEL,nom / MERCADO:LIST");
+    usart_enviar_string("HORNO:temp,min / SONIDO:ON[,0-10] / SONIDO:OFF / VOL:N / VOL:+ / VOL:- / MERCADO:ADD,nom,cant / MERCADO:DEL,nom / MERCADO:LIST");
     usart_enviar_newline();
     pos_codigo = 0; // asegurar que el buffer del codigo empiece vacio (redundante pero explicito)
 }
@@ -956,20 +1023,14 @@ void loop() {
     //   Una linea completa indica que el usuario termino de escribir el comando.
     if (usart_hay_linea()) {
 
-        // Buffer local para la linea recibida. 32 bytes = USART_RX_BUF_SIZE.
-        // 'char comando[32]': array en el stack (SRAM local de esta funcion).
         char comando[32];
 
-        // usart_leer_linea(): copia los bytes del buffer circular hasta '\n'
-        // al array 'comando' y agrega '\0'. Consume los datos del buffer.
-        usart_leer_linea(comando);
-
-        // Normalizar a mayusculas para que strncmp en procesar_comando_serial
-        // funcione sin importar el casing del usuario ("arm" = "ARM" = "Arm").
-        a_mayusculas(comando);
-
-        // Parsear y ejecutar el comando recibido
-        procesar_comando_serial(comando);
+        // Si la linea es vacia (n=0) ignorarla: puede ser el '\n' sobrante
+        // del par \r\n que la terminal envia al presionar Enter.
+        if (usart_leer_linea(comando) > 0) {
+            a_mayusculas(comando);
+            procesar_comando_serial(comando);
+        }
     }
 
     // ── 3b. VOLUMEN DEL EQUIPO DE SONIDO (Fase 7) ────────────────────────────
