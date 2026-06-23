@@ -37,8 +37,7 @@ uint8_t mercado_agregar(const char* nombre, uint8_t cantidad) {
 
     char nombre_leido[MERCADO_NOMBRE_LEN + 1];
 
-    // Primero verificar que el producto no exista ya (evita duplicados
-    // y escrituras innecesarias en EEPROM -- proteccion de ciclos)
+    // Primero buscar si el producto YA existe en la lista.
     for (uint8_t i = 0; i < MERCADO_MAX_ITEMS; i++) {
 
         uint16_t dir = direccion_slot(i);
@@ -49,9 +48,17 @@ uint8_t mercado_agregar(const char* nombre, uint8_t cantidad) {
         }
 
         // Si coincide exactamente con el nombre que se quiere agregar,
-        // no se duplica -- se considera que ya existe
+        // NO se rechaza como duplicado: se SOBRESCRIBE la cantidad con el
+        // nuevo valor (ej. "pan x2" y luego agregar "pan,3" -> queda "pan x3").
         if (strncmp(nombre_leido, nombre, MERCADO_NOMBRE_LEN) == 0) {
-            return 0; // ya existe, no se agrega de nuevo
+
+            uint16_t dir_cant = dir + MERCADO_NOMBRE_LEN + 1; // byte de la cantidad
+
+            // Proteccion de ciclos de EEPROM: solo reescribir si cambia.
+            if (eeprom_read_byte((const uint8_t*)dir_cant) != cantidad) {
+                eeprom_write_byte((uint8_t*)dir_cant, cantidad);
+            }
+            return 2; // ya existia: cantidad reemplazada por la nueva
         }
     }
 

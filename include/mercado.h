@@ -35,10 +35,14 @@
 // Inicializa el modulo (no requiere configuracion de hardware)
 void mercado_init();
 
-// Agrega un producto a la lista. Busca el primer slot vacio.
+// Agrega un producto a la lista. Si el producto YA existe, reemplaza su
+// cantidad por la nueva (no lo rechaza como duplicado).
 // nombre: maximo MERCADO_NOMBRE_LEN caracteres (se trunca si es mas largo)
 // cantidad: 0-255
-// Retorna 1 si se agrego correctamente, 0 si no hay espacio o ya existe
+// Retorna:
+//   1 = producto nuevo agregado
+//   2 = el producto ya existia y se REEMPLAZO su cantidad
+//   0 = no hay espacio (lista llena)
 uint8_t mercado_agregar(const char* nombre, uint8_t cantidad);
 
 // Elimina un producto de la lista por nombre exacto.

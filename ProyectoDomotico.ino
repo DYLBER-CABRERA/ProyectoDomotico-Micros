@@ -115,6 +115,24 @@ static uint8_t cmd_pos = 0;
 static void ejecutar_comando_teclado(char* cmd);
 
 
+// ─── LETRERO DESLIZANTE DEL MERCADO (marquee de la linea 0) ──────────────────
+// Cuando se agrega o elimina un producto se muestra "<producto> AGREGADO" o
+// "<producto> ELIMINADO" en la linea 0. Si el texto cabe en 16 columnas se
+// muestra FIJO; si es mas largo, se desliza hacia la izquierda como letrero de
+// bus. Es NO BLOQUEANTE: marquee_actualizar() avanza un paso por vuelta del loop
+// solo cuando toca, sin frenar teclado/alarmas/serial.
+static char     marquee_buf[40];     // mensaje completo a mostrar
+static uint8_t  marquee_len    = 0;  // largo del mensaje en marquee_buf
+static uint8_t  marquee_off    = 0;  // inicio de la ventana visible (desplazamiento)
+static uint8_t  marquee_activo = 0;  // 1 = hay un mensaje deslizandose
+static uint16_t marquee_tick   = 0;  // vueltas del loop desde el ultimo paso
+
+// Vueltas del loop entre cada desplazamiento de 1 caracter. Mas alto = mas lento.
+// Referencia: INTERVALO_TEMP = 2000 equivale a ~2-3 s, asi que 300 da ~0.3-0.4 s
+// por paso. Ajusta a gusto si lo quieres mas rapido o mas lento.
+#define MARQUEE_VELOCIDAD  300
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // a_mayusculas(s)
 // Convierte la cadena 's' a mayusculas en el lugar (modifica el original).
@@ -653,10 +671,12 @@ static void procesar_comando_serial(char* comando) {
             *coma = '\0';                 // terminar el nombre justo en la coma
             uint8_t cantidad = texto_a_numero(coma + 1);
 
-            if (mercado_agregar(args, cantidad)) {
-                usart_enviar_string("OK:MERCADO_AGREGADO");
+            uint8_t r = mercado_agregar(args, cantidad);
+            if (r == 0) {
+                usart_enviar_string("ERROR:MERCADO_LLENO");
             } else {
-                usart_enviar_string("ERROR:MERCADO_LLENO_O_DUPLICADO");
+                // r==2: ya existia y se reemplazo la cantidad; r==1: nuevo
+                usart_enviar_string((r == 2) ? "OK:MERCADO_ACTUALIZADO" : "OK:MERCADO_AGREGADO");
             }
         } else {
             usart_enviar_string("ERROR:FORMATO_MERCADO");
@@ -788,6 +808,69 @@ static const char* producto_por_codigo(uint8_t cod) {
 // Reutiliza las MISMAS funciones de modulo que el parser serial.
 // Ver la tabla completa de combinaciones en COMANDOS_TECLADO.md.
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCIONES DEL LETRERO DESLIZANTE (marquee) DE LA LINEA 0
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Repinta la linea 0 con el estado ACTUAL de la alarma. Se llama cuando el
+// letrero termina, para devolver la pantalla a su aspecto normal.
+static void repintar_alarma_lcd() {
+    lcd_goto(0, 0);
+    if (alarma_estado() == ALARMA_ARMADA) {
+        lcd_string("ALARMA: ARMADA  ");
+    } else if (alarma_estado() == ALARMA_DISPARADA) {
+        if (alarma_tipo_disparo() == ALARMA_TIPO_INCENDIO)    lcd_string("!! INCENDIO !!  ");
+        else if (alarma_tipo_disparo() == ALARMA_TIPO_ACCESO) lcd_string("!! INTRUSION !! ");
+        else                                                  lcd_string("!! INTRUSO !!   ");
+    } else {
+        lcd_string("ALARMA: DESACTIV");
+    }
+}
+
+// Dibuja en la linea 0 una "ventana" de 16 caracteres del mensaje, empezando en
+// marquee_off. Lo que cae fuera del mensaje se rellena con espacios para borrar
+// el frame anterior.
+static void marquee_render() {
+    lcd_goto(0, 0);
+    for (uint8_t i = 0; i < 16; i++) {
+        uint8_t idx = marquee_off + i;
+        lcd_char(idx < marquee_len ? marquee_buf[idx] : ' ');
+    }
+}
+
+// Inicia la presentacion de 'msg'. Copia el texto a un buffer propio. Si cabe
+// (<=16) lo deja FIJO; si es mas largo, activa el deslizamiento.
+static void marquee_mostrar(const char* msg) {
+    uint8_t n = 0;
+    while (msg[n] && n < sizeof(marquee_buf) - 1) {
+        marquee_buf[n] = msg[n];
+        n++;
+    }
+    marquee_buf[n] = '\0';
+    marquee_len  = n;
+    marquee_off  = 0;
+    marquee_tick = 0;
+    marquee_render();                              // primer frame inmediato
+    marquee_activo = (marquee_len > 16) ? 1 : 0;   // solo desliza si NO cabe
+}
+
+// Avanza el letrero un paso cuando corresponde. Llamar en CADA vuelta del loop.
+// No hace nada si no hay letrero activo (caso comun), asi que es muy barato.
+static void marquee_actualizar() {
+    if (!marquee_activo) return;
+    marquee_tick++;
+    if (marquee_tick < MARQUEE_VELOCIDAD) return;  // aun no toca mover
+    marquee_tick = 0;
+    marquee_off++;
+    if (marquee_off > marquee_len) {               // el mensaje ya salio por la izquierda
+        marquee_activo = 0;
+        repintar_alarma_lcd();                     // devolver la linea 0 a su estado normal
+        return;
+    }
+    marquee_render();
+}
+
+
 static void ejecutar_comando_teclado(char* cmd) {
 
     // Medir el largo del comando tecleado
@@ -901,12 +984,22 @@ static void ejecutar_comando_teclado(char* cmd) {
             if (nom == NULL) {
                 lcd_goto(0, 0); lcd_string("PROD DESCONOCIDO");
                 usart_enviar_string("ERROR:PRODUCTO_DESCONOCIDO");
-            } else if (mercado_agregar(nom, p2)) {
-                lcd_goto(0, 0); lcd_string("MERCADO +       ");
-                usart_enviar_string("OK:MERCADO_AGREGADO");
             } else {
-                lcd_goto(0, 0); lcd_string("MERC LLENO/DUP  ");
-                usart_enviar_string("ERROR:MERCADO_LLENO_O_DUPLICADO");
+                uint8_t r = mercado_agregar(nom, p2);
+                if (r == 0) {
+                    // Lista llena. Ya NO existe el caso "duplicado": los
+                    // repetidos se actualizan, no se rechazan.
+                    lcd_goto(0, 0); lcd_string("MERCADO LLENO   ");
+                    usart_enviar_string("ERROR:MERCADO_LLENO");
+                } else {
+                    // r==1 producto nuevo; r==2 ya existia y se reemplazo la cantidad.
+                    // Letrero "<producto> AGREGADO/ACTUALIZADO" (fijo si cabe, desliza si no)
+                    char msg[40];
+                    strcpy(msg, nom);
+                    strcat(msg, (r == 2) ? " ACTUALIZADO" : " AGREGADO");
+                    marquee_mostrar(msg);
+                    usart_enviar_string((r == 2) ? "OK:MERCADO_ACTUALIZADO" : "OK:MERCADO_AGREGADO");
+                }
             }
             usart_enviar_newline();
             break;
@@ -917,7 +1010,11 @@ static void ejecutar_comando_teclado(char* cmd) {
                 lcd_goto(0, 0); lcd_string("PROD DESCONOCIDO");
                 usart_enviar_string("ERROR:PRODUCTO_DESCONOCIDO");
             } else if (mercado_eliminar(nom)) {
-                lcd_goto(0, 0); lcd_string("MERCADO -       ");
+                // Letrero "<producto> ELIMINADO" (fijo si cabe, deslizante si no)
+                char msg[40];
+                strcpy(msg, nom);
+                strcat(msg, " ELIMINADO");
+                marquee_mostrar(msg);
                 usart_enviar_string("OK:MERCADO_ELIMINADO");
             } else {
                 lcd_goto(0, 0); lcd_string("MERC NO EXISTE  ");
@@ -1090,6 +1187,10 @@ void loop() {
         //                             y la alarma de acceso estaba ARMADA.
         uint8_t tipo = alarma_tipo_disparo();
 
+        // Un evento de alarma tiene prioridad sobre la linea 0: cancelar el
+        // letrero del mercado para que no vuelva a pisar el mensaje de alarma.
+        marquee_activo = 0;
+
         // Responder segun el tipo de evento detectado
         if (tipo == ALARMA_TIPO_INCENDIO) {
             lcd_goto(0, 0);              // linea 0: exclusiva del estado de alarma
@@ -1144,6 +1245,11 @@ void loop() {
     // Si el equipo esta encendido, lee el potenciometro (A13/PK5) y ajusta el
     // volumen en tiempo real. No bloquea: solo lee el ADC y escribe el PWM.
     sonido_actualizar();
+
+    // ── 3c. LETRERO DESLIZANTE DEL MERCADO ───────────────────────────────────
+    // Avanza un paso del marquee cuando toca. No bloquea: si no hay letrero
+    // activo retorna de inmediato.
+    marquee_actualizar();
 
     // ── 4. TEMPERATURA Y TEMPORIZADO (Fase 6) ────────────────────────────────
     // Incrementar los dos contadores en cada vuelta del loop.
