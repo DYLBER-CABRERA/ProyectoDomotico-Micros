@@ -366,6 +366,26 @@ uint8_t rfid_leer_uid(uint8_t* uid) {
     return 1;
 }
 
+// -- rc522_calcular_crc(datos, len, crc) -----------------------------------
+// Calcula el CRC-A de 'len' bytes con el coprocesador del RC522.
+// Resultado: crc[0] = CRC_L, crc[1] = CRC_H.
+// Los comandos MIFARE READ (0x30) y WRITE (0xA0) DEBEN llevar este CRC al
+// final, o la tarjeta los ignora (no responde / NAK).
+static void rc522_calcular_crc(const uint8_t* datos, uint8_t len, uint8_t* crc) {
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+    rc522_escribir_reg(0x05, 0x04);                   // DivIrqReg: limpiar CRCIRq
+    rc522_escribir_reg(RC522_REG_FIFO_LEVEL, 0x80);   // vaciar FIFO
+    for (uint8_t i = 0; i < len; i++)
+        rc522_escribir_reg(RC522_REG_FIFO_DATA, datos[i]);
+    rc522_escribir_reg(RC522_REG_COMMAND, 0x03);      // CalcCRC
+    for (uint16_t i = 0; i < 5000; i++) {
+        if (rc522_leer_reg(0x05) & 0x04) break;        // esperar CRCIRq
+    }
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+    crc[0] = rc522_leer_reg(0x22);                     // CRCResultRegL
+    crc[1] = rc522_leer_reg(0x21);                     // CRCResultRegH
+}
+
 // -- rfid_leer_contador() --------------------------------------------------
 uint8_t rfid_leer_contador(uint8_t* uid, uint8_t* valor) {
     uint8_t bloque[16];
@@ -373,12 +393,14 @@ uint8_t rfid_leer_contador(uint8_t* uid, uint8_t* valor) {
     // Autenticar con key A para el bloque del contador
     if (!rc522_autenticar(TARJETA_BLOQUE_CONTADOR, uid)) return 0;
 
-    // Comando READ: enviar 0x30 + direccion de bloque
-    uint8_t tx[2] = {PICC_CMD_READ, TARJETA_BLOQUE_CONTADOR};
+    // Comando READ: [0x30, bloque, CRC_L, CRC_H]. MIFARE EXIGE el CRC; sin el,
+    // la tarjeta ignora el comando y no devuelve datos (se leia 0 -> SIN_CUPOS).
+    uint8_t tx[4] = {PICC_CMD_READ, TARJETA_BLOQUE_CONTADOR, 0, 0};
+    rc522_calcular_crc(tx, 2, &tx[2]);
     uint8_t rx_len = sizeof(bloque);
 
-    if (!rc522_transceive(tx, 2, bloque, &rx_len)) return 0;
-    if (rx_len < 1) return 0;
+    if (!rc522_transceive(tx, 4, bloque, &rx_len)) return 0;
+    if (rx_len < 16) return 0;   // respuesta valida = 16 bytes de datos del bloque
 
     // El contador esta en el primer byte del bloque
     *valor = bloque[0];
@@ -392,22 +414,28 @@ uint8_t rfid_escribir_contador(uint8_t* uid, uint8_t valor) {
     // Autenticar
     if (!rc522_autenticar(TARJETA_BLOQUE_CONTADOR, uid)) return 0;
 
-    // Primero leer el bloque actual para preservar los demas bytes
-    uint8_t tx_read[2] = {PICC_CMD_READ, TARJETA_BLOQUE_CONTADOR};
+    // Primero leer el bloque actual para preservar los demas bytes.
+    // READ tambien requiere CRC: [0x30, bloque, CRC_L, CRC_H].
+    uint8_t tx_read[4] = {PICC_CMD_READ, TARJETA_BLOQUE_CONTADOR, 0, 0};
+    rc522_calcular_crc(tx_read, 2, &tx_read[2]);
     uint8_t rx_len = sizeof(bloque);
-    if (!rc522_transceive(tx_read, 2, bloque, &rx_len)) return 0;
+    if (!rc522_transceive(tx_read, 4, bloque, &rx_len)) return 0;
     if (rx_len < 16) return 0;
 
     // Modificar solo el primer byte (contador)
     bloque[0] = valor;
 
-    // WRITE MIFARE requiere dos pasos separados con ACK de 4 bits entre ellos.
-    // Paso 1: enviar [CMD, bloque] y esperar ACK (0x0A, 4 bits) de la tarjeta
-    uint8_t tx_cmd[2] = {PICC_CMD_WRITE, TARJETA_BLOQUE_CONTADOR};
-    if (!rc522_mifare_cmd(tx_cmd, 2)) return 0;
+    // WRITE MIFARE = dos pasos con ACK de 4 bits, AMBOS con CRC.
+    // Paso 1: [0xA0, bloque, CRC_L, CRC_H] -> la tarjeta responde ACK (0x0A).
+    uint8_t tx_cmd[4] = {PICC_CMD_WRITE, TARJETA_BLOQUE_CONTADOR, 0, 0};
+    rc522_calcular_crc(tx_cmd, 2, &tx_cmd[2]);
+    if (!rc522_mifare_cmd(tx_cmd, 4)) return 0;
 
-    // Paso 2: enviar los 16 bytes de datos y esperar ACK final
-    if (!rc522_mifare_cmd(bloque, 16)) return 0;
+    // Paso 2: [16 bytes de datos, CRC_L, CRC_H] -> ACK final.
+    uint8_t tx_data[18];
+    for (uint8_t i = 0; i < 16; i++) tx_data[i] = bloque[i];
+    rc522_calcular_crc(tx_data, 16, &tx_data[16]);
+    if (!rc522_mifare_cmd(tx_data, 18)) return 0;
 
     return 1;
 }
