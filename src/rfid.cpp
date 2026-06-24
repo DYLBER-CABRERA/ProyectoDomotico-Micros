@@ -164,13 +164,51 @@ static uint8_t rc522_transceive_reqa(uint8_t* respuesta) {
     return (nivel > 0);
 }
 
+// -- Transceive para comandos MIFARE que responden con ACK de 4 bits -------
+// A diferencia de rc522_transceive, acepta respuestas de 4 bits (MF_ACK=0x0A)
+// sin tratarlas como ProtocolErr. Necesario para los dos pasos del WRITE.
+static uint8_t rc522_mifare_cmd(const uint8_t* tx, uint8_t tx_len) {
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+    rc522_escribir_reg(RC522_REG_FIFO_LEVEL, 0x80);
+    rc522_escribir_fifo(tx, tx_len);
+    rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x00);
+    rc522_escribir_reg(RC522_REG_COM_IRQ, 0x7F);
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_TRANSCEIVE);
+    rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x80);  // StartSend
+
+    uint16_t timeout = 0;
+    while (!(rc522_leer_reg(RC522_REG_COM_IRQ) & 0x31)) {
+        if (++timeout > 3000) { rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE); return 0; }
+    }
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+
+    uint8_t nivel = rc522_leer_reg(RC522_REG_FIFO_LEVEL);
+    if (nivel == 0) return 0;
+
+    uint8_t resp  = rc522_leer_reg(RC522_REG_FIFO_DATA);
+    uint8_t ctrl  = rc522_leer_reg(0x0C);  // ControlReg: bits 2:0 = RxLastBits
+
+    if ((ctrl & 0x07) == 4) {
+        // Respuesta de 4 bits: ACK MIFARE = 0x0A, NAK = cualquier otro
+        return ((resp & 0x0F) == 0x0A) ? 1 : 0;
+    }
+    // Respuesta de 8 bits: verificar errores normales
+    return (rc522_leer_reg(RC522_REG_ERROR) & 0x1B) ? 0 : 1;
+}
+
 // -- Autenticar con la tarjeta para acceder a un bloque --------------------
 static uint8_t rc522_autenticar(uint8_t bloque, const uint8_t* uid) {
-    // Limpiar Crypto1On
+    // Si la sesion ya esta activa (MFCrypto1On=1), no re-autenticar.
+    // Un segundo MFAUTHENT sobre sesion activa destruye el handshake
+    // porque la tarjeta espera datos cifrados, no otro challenge-response.
+    if (rc522_leer_reg(RC522_REG_STATUS2) & 0x08) return 1;
+
     rc522_escribir_reg(RC522_REG_STATUS2, 0x00);
 
-    // Cargar llave (6 bytes) + UID (4 bytes) en FIFO
+    // FIFO para MFAUTHENT: [CMD(1), bloque(1), llave(6), UID(4)] = 12 bytes exactos
     rc522_escribir_reg(RC522_REG_FIFO_LEVEL, 0x80);
+    uint8_t header[2] = {PICC_CMD_AUTH_KEY_A, bloque};
+    rc522_escribir_fifo(header, 2);
     rc522_escribir_fifo(LLAVE_MIFARE, 6);
     rc522_escribir_fifo(uid, 4);
 
@@ -301,6 +339,30 @@ uint8_t rfid_leer_uid(uint8_t* uid) {
     uid[2] = rx_buf[2];
     uid[3] = rx_buf[3];
 
+    // SELECT cascade level 1: transiciona la tarjeta de READY a ACTIVE.
+    // Sin SELECT, la tarjeta ignora HALT y el lector la detecta infinitamente.
+    {
+        uint8_t bcc = uid[0]^uid[1]^uid[2]^uid[3];
+        uint8_t sel[7] = {PICC_CMD_ANTICOLL_CL1, 0x70,
+                          uid[0], uid[1], uid[2], uid[3], bcc};
+        rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+        rc522_escribir_reg(RC522_REG_FIFO_LEVEL, 0x80);
+        for (uint8_t i = 0; i < 7; i++)
+            rc522_escribir_reg(RC522_REG_FIFO_DATA, sel[i]);
+        rc522_escribir_reg(RC522_REG_COMMAND, 0x03);  // CalcCRC
+        for (uint8_t i = 0; i < 255; i++) {
+            if (rc522_leer_reg(0x05) & 0x04) break;  // DivIrqReg CRCIRq
+        }
+        rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+        uint8_t crc_l = rc522_leer_reg(0x22);
+        uint8_t crc_h = rc522_leer_reg(0x21);
+        uint8_t tx_sel[9] = {sel[0], sel[1], sel[2], sel[3],
+                             sel[4], sel[5], sel[6], crc_l, crc_h};
+        uint8_t sak[3];
+        uint8_t sak_len = sizeof(sak);
+        rc522_transceive(tx_sel, 9, sak, &sak_len);
+    }
+
     return 1;
 }
 
@@ -338,18 +400,14 @@ uint8_t rfid_escribir_contador(uint8_t* uid, uint8_t valor) {
 
     // Modificar solo el primer byte (contador)
     bloque[0] = valor;
-    // NOTA: los bytes 1-15 se conservan tal cual estaban
 
-    // Comando WRITE: 0xA0 + direccion de bloque + 16 bytes de datos
-    uint8_t tx_write[18];
-    tx_write[0] = PICC_CMD_WRITE;
-    tx_write[1] = TARJETA_BLOQUE_CONTADOR;
-    for (uint8_t i = 0; i < 16; i++) {
-        tx_write[2 + i] = bloque[i];
-    }
+    // WRITE MIFARE requiere dos pasos separados con ACK de 4 bits entre ellos.
+    // Paso 1: enviar [CMD, bloque] y esperar ACK (0x0A, 4 bits) de la tarjeta
+    uint8_t tx_cmd[2] = {PICC_CMD_WRITE, TARJETA_BLOQUE_CONTADOR};
+    if (!rc522_mifare_cmd(tx_cmd, 2)) return 0;
 
-    // Escribir el bloque
-    if (!rc522_transceive(tx_write, 18, NULL, NULL)) return 0;
+    // Paso 2: enviar los 16 bytes de datos y esperar ACK final
+    if (!rc522_mifare_cmd(bloque, 16)) return 0;
 
     return 1;
 }
