@@ -1,4 +1,5 @@
 #include <avr/io.h>
+#include <util/delay.h>
 #include <string.h>
 #include "../include/rfid.h"
 #include "../include/spi_master.h"
@@ -192,9 +193,14 @@ static uint8_t rc522_autenticar(uint8_t bloque, const uint8_t* uid) {
 
 // -- rfid_init() -----------------------------------------------------------
 void rfid_init() {
-    // Soft reset del RC522
+    // Soft reset del RC522 y espera a que quede listo (replica PCD_Reset):
+    // esperar a que el bit PowerDown (bit 4) de CommandReg se limpie, hasta 3x50ms.
+    // El delay fijo corto anterior leia la version antes de tiempo (salia 0x77).
     rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_SOFT_RESET);
-    for (volatile uint16_t i = 0; i < 1000; i++);  // esperar a que termine
+    uint8_t intentos = 0;
+    do {
+        _delay_ms(50);
+    } while ((rc522_leer_reg(RC522_REG_COMMAND) & (1 << 4)) && (++intentos) < 3);
 
     // Verificar version del chip (debe ser 0x91 o 0x92)
     uint8_t version = rc522_leer_reg(RC522_REG_VERSION);
@@ -207,6 +213,15 @@ void rfid_init() {
     rc522_escribir_reg(0x2B, 0x07);  // TPrescalerReg
     rc522_escribir_reg(0x2C, 0x00);  // TReloadRegH
     rc522_escribir_reg(0x2D, 0x3F);  // TReloadRegL (63 -> ~25ms con prescaler)
+
+    // ── Registros que FALTABAN (secuencia de PCD_Init de miguelbalboa) ──────
+    // Sin estos, la antena no modula bien y la tarjeta NO se lee en hardware
+    // (errores de protocolo/paridad, ERR:7). Esta era la causa principal:
+    rc522_escribir_reg(0x12, 0x00);  // TxModeReg: baudrate Tx por defecto
+    rc522_escribir_reg(0x13, 0x00);  // RxModeReg: baudrate Rx por defecto
+    rc522_escribir_reg(0x24, 0x26);  // ModWidthReg: ancho de modulacion por defecto
+    rc522_escribir_reg(0x15, 0x40);  // TxASKReg: fuerza modulacion 100% ASK (CLAVE)
+    rc522_escribir_reg(0x11, 0x3D);  // ModeReg: preset CRC 0x6363 (ISO14443-3)
 
     // Encender antena
     uint8_t tx_ctrl = rc522_leer_reg(RC522_REG_TX_CONTROL);
