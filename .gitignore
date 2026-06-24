@@ -1,0 +1,17 @@
+# ── Artefactos de compilacion de Arduino ─────────────────────────────
+# Se regeneran solos cada vez que compilas. NO deben subirse al repo:
+# son binarios y provocan conflictos de merge imposibles de resolver.
+build/
+*.elf
+*.hex
+*.eep
+*.map
+*.lst
+*.o
+*.d
+*.a
+
+# ── Archivos del sistema operativo ───────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
