@@ -53,11 +53,16 @@ static volatile char    tecla_pendiente = '\0'; //Caracter detectado por ISR
 // La ISR la pone en 1; teclado_leer() la pone en 0
 static volatile uint8_t hay_tecla       = 0;// 1=tecla lista, 0=libre
 
-// barrido anterior. 0xFF significa "ninguna tecla presionada".
-// Esto es la clave de la correccion: permite distinguir entre
-// "se acaba de presionar" (evento nuevo) y "sigue sostenida
-// desde el barrido anterior" (NO es un evento nuevo, se ignora).
-static volatile uint8_t tecla_fisica_anterior = 0xFF;
+// -- Estado del DEBOUNCE POR INTEGRACION (ver ISR mas abajo) -------------
+// Numero de lecturas IGUALES consecutivas (cada ISR ~10ms) necesarias para
+// aceptar un estado como real. 2 muestras = ~20ms: suficiente para filtrar
+// el rebote de un teclado fisico sin que se sienta lento. Subelo a 3 si tu
+// teclado rebota mucho; bajalo a 1 para maxima velocidad (menos robusto).
+#define TEC_MUESTRAS_ESTABLE  2
+
+static volatile uint8_t lectura_previa  = 0xFF; // ultima lectura cruda vista
+static volatile uint8_t cuenta_estable  = 0;    // lecturas iguales seguidas
+static volatile uint8_t tecla_reportada = 0xFF; // ultimo estado ESTABLE aceptado
 
 // ============================================================
 // escanear_columna(col)
@@ -84,7 +89,11 @@ static uint8_t escanear_columna(uint8_t col) {
 
     // Esperar 5µs para que el pin se estabilice eléctricamente
     // antes de leer — evita leer durante la transición del pin
-    _delay_us(5);
+    // En Proteus 5us bastaban (lineas ideales). En hardware real, con los
+    // pull-up INTERNOS (~20-50k) y la capacitancia del cableado, la fila tarda
+    // mas en estabilizarse: 20us da margen y sigue siendo despreciable (4
+    // columnas = 80us por ISR). Aun mejor: pull-ups EXTERNOS de 1k-10k en las filas.
+    _delay_us(20);
 
     // Leer el estado actual de las 4 filas
     // PINA → registro de lectura del Puerto A (estado real de pines)
@@ -198,43 +207,51 @@ static uint8_t escanear_crudo() {
 // ============================================================
 
 // -- ISR(TIMER2_COMPA_vect) ----------------------------------------------
-// LOGICA CORREGIDA: solo reporta una tecla cuando hay una transicion
-// de "nada presionado" a "algo presionado". Si la misma tecla sigue
-// presionada en el siguiente barrido, NO se vuelve a reportar.
+// DEBOUNCE POR INTEGRACION (robusto en hardware real):
+// El teclado fisico REBOTA: al presionar/soltar, el contacto abre y cierra
+// varias veces durante unos milisegundos. En Proteus eso no pasa (contacto
+// ideal), por eso antes iba rapido en simulacion pero en fisico se "trababa"
+// o perdia pulsaciones. Aqui NO se actua ante la lectura cruda: se exige que
+// la misma lectura se repita TEC_MUESTRAS_ESTABLE veces seguidas (cada ISR =
+// ~10ms) antes de aceptarla como estado real. Asi el rebote se filtra y cada
+// pulsacion se registra UNA sola vez, de forma fiable y rapida (~20ms).
 ISR(TIMER2_COMPA_vect) {
 
-    // Leer el estado fisico actual del teclado (sin logica de eventos)
-    uint8_t tecla_fisica_actual = escanear_crudo();
+    // Lectura cruda del estado fisico AHORA (codigo 0-15, o 0xFF si nada)
+    uint8_t actual = escanear_crudo();
 
-    // Comparar contra lo que habia en el barrido ANTERIOR
-    if (tecla_fisica_actual != tecla_fisica_anterior) {
-
-        // Hubo un CAMBIO de estado fisico (alguien solto o presiono algo)
-
-        if (tecla_fisica_actual != 0xFF) {
-            // El cambio fue: de "nada" a "una tecla nueva presionada"
-            // Esto SI es un evento valido de pulsacion
-
-            // Solo reportar si el loop ya consumio la tecla anterior
-            if (!hay_tecla) {
-                uint8_t fila = tecla_fisica_actual / 4;
-                uint8_t col  = tecla_fisica_actual % 4;
-
-                tecla_pendiente = mapa[fila][col];
-                hay_tecla       = 1;
-            }
-        }
-        // Si tecla_fisica_actual == 0xFF, significa que SOLTARON
-        // la tecla. No se reporta nada en ese caso -- solo actualiza
-        // el "recuerdo" para permitir la siguiente pulsacion
-
-        // Actualizar el recuerdo para el siguiente barrido
-        tecla_fisica_anterior = tecla_fisica_actual;
+    // -- Integracion: contar cuantas lecturas IGUALES seguidas llevamos --
+    if (actual == lectura_previa) {
+        if (cuenta_estable < 255) cuenta_estable++;
+    } else {
+        lectura_previa = actual;   // cambio de lectura: reiniciar el conteo
+        cuenta_estable = 0;
     }
-    // Si tecla_fisica_actual == tecla_fisica_anterior, la tecla
-    // sigue sostenida desde el barrido anterior (o sigue sin
-    // presionarse nada) -- en ambos casos NO se hace nada nuevo,
-    // evitando exactamente el bug de las repeticiones
+
+    // Actuar SOLO cuando la lectura lleva EXACTAMENTE el umbral de muestras
+    // estables. Usar '==' (no '>=') hace que esto se ejecute una unica vez por
+    // estado estable, aunque la tecla se siga sosteniendo muchos ciclos mas
+    // (asi nunca se repite la tecla sola).
+    if (cuenta_estable == TEC_MUESTRAS_ESTABLE) {
+
+        // 'actual' ya esta libre de rebotes: es el estado REAL del teclado.
+        if (actual != tecla_reportada) {
+            tecla_reportada = actual;   // recordar el estado estable aceptado
+
+            // Paso de "nada" (o de otra tecla ya soltada) a una tecla nueva:
+            if (actual != 0xFF) {
+                // Registrar la pulsacion (si el loop ya consumio la anterior)
+                if (!hay_tecla) {
+                    uint8_t fila = actual / 4;
+                    uint8_t col  = actual % 4;
+                    tecla_pendiente = mapa[fila][col];
+                    hay_tecla       = 1;
+                }
+            }
+            // Si actual == 0xFF, la tecla se solto de forma estable: no se
+            // registra nada, solo queda listo para aceptar la proxima.
+        }
+    }
 }
 
 // ============================================================
