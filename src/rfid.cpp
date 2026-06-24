@@ -42,7 +42,7 @@ static inline void rc522_escribir_reg(uint8_t reg, uint8_t valor) {
 static inline uint8_t rc522_leer_reg(uint8_t reg) {
     uint8_t valor;
     spi_cs_bajar();
-    spi_transferir((reg << 1) | 1);    // bit 0 = 1 indica lectura
+    spi_transferir((reg << 1) | 0x80); // bit 7 = 1 indica LECTURA (protocolo MFRC522)
     valor = spi_transferir(0x00);
     spi_cs_subir();
     return valor;
