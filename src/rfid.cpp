@@ -193,6 +193,16 @@ static uint8_t rc522_autenticar(uint8_t bloque, const uint8_t* uid) {
 
 // -- rfid_init() -----------------------------------------------------------
 void rfid_init() {
+    // ── Reset por HARDWARE del RC522 (pin RST cableado a D4 = PG5) ───────────
+    // El RST del RC522 (NRSTPD) es ACTIVO EN BAJO: en bajo lo mantiene en reset
+    // (mudo), en alto lo deja funcionar. Si el pin queda flotando o en bajo, el
+    // modulo NO responde. Aqui damos un pulso de reset y lo dejamos en ALTO.
+    DDRG  |= (1 << PG5);     // D4 (PG5) como salida
+    PORTG &= ~(1 << PG5);    // RST en BAJO: reset activo
+    _delay_ms(1);
+    PORTG |=  (1 << PG5);    // RST en ALTO: el modulo sale de reset
+    _delay_ms(50);           // esperar arranque del oscilador (~37.74us + cristal)
+
     // Soft reset del RC522 y espera a que quede listo (replica PCD_Reset):
     // esperar a que el bit PowerDown (bit 4) de CommandReg se limpie, hasta 3x50ms.
     // El delay fijo corto anterior leia la version antes de tiempo (salia 0x77).
