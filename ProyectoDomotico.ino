@@ -1126,6 +1126,10 @@ void setup() {
     mercado_init();     // Fase 7c: lista de mercado en EEPROM (sin hardware)
 
     // Fase 4: RFID y control de acceso
+    // RST del RC522 en pin 4 (PG5): HIGH = activo, LOW = power-down (no responde a SPI)
+    DDRG  |= (1 << PG5);
+    PORTG |= (1 << PG5);
+    _delay_ms(50);      // esperar que oscilador del RC522 estabilice (libreria usa 50ms)
     spi_init();         // SPI maestro (PB0-PB3) para RC522
     eeprom_init();      // gestor de UIDs en EEPROM (0x000-0x09F)
     rfid_init();        // modulo RC522 por SPI

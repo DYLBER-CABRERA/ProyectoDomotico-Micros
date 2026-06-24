@@ -1,4 +1,5 @@
 #include <avr/io.h>
+#include <util/delay.h>
 #include <string.h>
 #include "../include/rfid.h"
 #include "../include/spi_master.h"
@@ -9,6 +10,8 @@
 extern void usart_enviar_string(const char* s);
 extern void usart_enviar_int(int16_t n);
 extern void usart_enviar_newline();
+extern void lcd_goto(uint8_t row, uint8_t col);
+extern void lcd_string(const char* s);
 
 // Llave por defecto para autenticacion MIFARE (todo 0xFF)
 static const uint8_t LLAVE_MIFARE[6] = LLAVE_DEFECTO;
@@ -87,7 +90,7 @@ static uint8_t rc522_transceive(const uint8_t* tx, uint8_t tx_len,
     rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x00);
 
     // Limpiar interrupciones y ejecutar Transceive
-    rc522_escribir_reg(RC522_REG_COM_IRQ, 0x80);
+    rc522_escribir_reg(RC522_REG_COM_IRQ, 0x7F);
     rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_TRANSCEIVE);
 
     // Activar la transmision seteando bit StartSend en BitFramingReg
@@ -119,6 +122,9 @@ static uint8_t rc522_transceive(const uint8_t* tx, uint8_t tx_len,
 
 // -- Transceive para REQA (formato especial con 7 bits) --------------------
 static uint8_t rc522_transceive_reqa(uint8_t* respuesta) {
+    // Detener cualquier comando previo
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+
     // Vaciar FIFO
     rc522_escribir_reg(RC522_REG_FIFO_LEVEL, 0x80);
 
@@ -129,28 +135,32 @@ static uint8_t rc522_transceive_reqa(uint8_t* respuesta) {
     // BitFraming: ultimo byte tiene 7 bits
     rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x07);
 
-    // Limpiar interrupciones
-    rc522_escribir_reg(RC522_REG_COM_IRQ, 0x80);
+    // Limpiar interrupciones: Set1=0 + todos bits=1 → limpia todos los flags
+    rc522_escribir_reg(RC522_REG_COM_IRQ, 0x7F);
     rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_TRANSCEIVE);
 
     // Activar transmision
     rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x87);  // 0x80 (start) | 0x07 (7 bits)
 
-    // Esperar RxIRq(0x20) | IdleIRq(0x10) | TimerIRq(0x01) — salir ante cualquiera
+    // Esperar RxIRq(0x20) | IdleIRq(0x10) | TimerIRq(0x01)
     uint16_t timeout = 0;
     while (!(rc522_leer_reg(RC522_REG_COM_IRQ) & 0x31)) {
         timeout++;
-        if (timeout > 3000) return 0;
+        if (timeout > 3000) break;
     }
 
-    uint8_t error = rc522_leer_reg(RC522_REG_ERROR);
-    if (error & 0x1B) return 0;
-
+    uint8_t irq   = rc522_leer_reg(RC522_REG_COM_IRQ);
     uint8_t nivel = rc522_leer_reg(RC522_REG_FIFO_LEVEL);
+
+    // Detener TRANSCEIVE
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+
+    // Solo hay tarjeta si RxIRq (bit 5) se activo — sin CRC check (ATQA es short frame)
+    if (!(irq & 0x20)) return 0;
+
     if (nivel > 0 && respuesta != NULL) {
         respuesta[0] = rc522_leer_reg(RC522_REG_FIFO_DATA);
     }
-
     return (nivel > 0);
 }
 
@@ -165,6 +175,7 @@ static uint8_t rc522_autenticar(uint8_t bloque, const uint8_t* uid) {
     rc522_escribir_fifo(uid, 4);
 
     // Ejecutar comando MFAuthent
+    rc522_escribir_reg(RC522_REG_COM_IRQ, 0x7F);
     rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_MFAUTHENT);
     rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x00);
 
@@ -190,25 +201,63 @@ static uint8_t rc522_autenticar(uint8_t bloque, const uint8_t* uid) {
 // API PUBLICA
 // ==========================================================================
 
+// -- rc522_halt() -----------------------------------------------------------
+// Envia HALT a la tarjeta. Despues de HALT la tarjeta no responde a REQA
+// (solo a WUPA), evitando re-deteccion en el siguiente ciclo de sondeo.
+static void rc522_halt() {
+    // Desactivar Crypto1 si quedo activo tras autenticacion
+    rc522_escribir_reg(RC522_REG_STATUS2, 0x00);
+
+    // Calcular CRC-A de la trama [0x50, 0x00]
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+    rc522_escribir_reg(RC522_REG_FIFO_LEVEL, 0x80);
+    rc522_escribir_reg(RC522_REG_FIFO_DATA, 0x50);
+    rc522_escribir_reg(RC522_REG_FIFO_DATA, 0x00);
+    rc522_escribir_reg(RC522_REG_COMMAND, 0x03);       // CalcCRC
+    for (uint8_t i = 0; i < 255; i++) {
+        if (rc522_leer_reg(0x05) & 0x04) break;        // DivIrqReg: CRCIRq
+    }
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+    uint8_t crc_l = rc522_leer_reg(0x22);              // CRCResultRegL
+    uint8_t crc_h = rc522_leer_reg(0x21);              // CRCResultRegH
+
+    // Transmitir HALT [0x50, 0x00, CRC_L, CRC_H] — sin esperar respuesta
+    rc522_escribir_reg(RC522_REG_COM_IRQ, 0x7F);
+    rc522_escribir_reg(RC522_REG_FIFO_LEVEL, 0x80);
+    rc522_escribir_reg(RC522_REG_FIFO_DATA, 0x50);
+    rc522_escribir_reg(RC522_REG_FIFO_DATA, 0x00);
+    rc522_escribir_reg(RC522_REG_FIFO_DATA, crc_l);
+    rc522_escribir_reg(RC522_REG_FIFO_DATA, crc_h);
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_TRANSCEIVE);
+    rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x80);   // StartSend=1
+    _delay_ms(2);
+    rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_IDLE);
+    rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x00);
+}
+
 // -- rfid_init() -----------------------------------------------------------
 void rfid_init() {
-    // Soft reset del RC522
+    // Soft reset — esperar hasta que PowerDown (bit 4 de CommandReg) se limpie
     rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_SOFT_RESET);
-    for (volatile uint16_t i = 0; i < 1000; i++);  // esperar a que termine
-
-    // Verificar version del chip (debe ser 0x91 o 0x92)
-    uint8_t version = rc522_leer_reg(RC522_REG_VERSION);
-    usart_enviar_string("RC522 VER:0x");
-    usart_enviar_int(version);
-    usart_enviar_newline();
+    for (uint8_t i = 0; i < 3; i++) {
+        _delay_ms(50);
+        if (!(rc522_leer_reg(RC522_REG_COMMAND) & 0x10)) break;
+    }
 
     // Configurar timer del RC522 para timeout de comunicacion
-    rc522_escribir_reg(0x2A, 0x8D);  // TModeReg: TAuto=1 → timer arranca tras cada Tx
+    rc522_escribir_reg(0x2A, 0x8D);  // TModeReg: TAuto=1
     rc522_escribir_reg(0x2B, 0x07);  // TPrescalerReg
     rc522_escribir_reg(0x2C, 0x00);  // TReloadRegH
-    rc522_escribir_reg(0x2D, 0x3F);  // TReloadRegL (63 -> ~25ms con prescaler)
+    rc522_escribir_reg(0x2D, 0x3F);  // TReloadRegL (~25ms)
 
-    // Encender antena
+    // Modulacion 100% ASK — igual que la libreria MFRC522 (PCD_Init)
+    // Sin esto la senal RF es debil y las tarjetas no detectan el REQA
+    rc522_escribir_reg(0x15, 0x40);  // TxASKReg: Force100ASK=1
+
+    // Preset CRC a 0x6363 segun ISO 14443-3
+    rc522_escribir_reg(0x11, 0x3D);  // ModeReg
+
+    // Encender antena (TX1 + TX2)
     uint8_t tx_ctrl = rc522_leer_reg(RC522_REG_TX_CONTROL);
     if (!(tx_ctrl & 0x03)) {
         rc522_escribir_reg(RC522_REG_TX_CONTROL, tx_ctrl | 0x03);
@@ -349,14 +398,17 @@ static void manejar_tarjeta_ok() {
                 // Guardado exitoso
                 if (op_tipo == 0) {
                     usart_enviar_string("OK:ENROLADO_ADULTO");
+                    usart_enviar_newline();
+                    lcd_goto(1, 0); lcd_string("ENROLADO ADULTO ");
                 } else {
                     usart_enviar_string("OK:ENROLADO_HIJO,");
                     usart_enviar_int(op_cupos);
+                    usart_enviar_newline();
+                    lcd_goto(1, 0); lcd_string("ENROLADO HIJO   ");
 
                     // Escribir cupos iniciales en la tarjeta
                     rfid_escribir_contador(uid_actual, op_cupos);
                 }
-                usart_enviar_newline();
             } else {
                 usart_enviar_string("ERROR:EEPROM_LLENA_O_DUPLICADO");
                 usart_enviar_newline();
@@ -366,6 +418,7 @@ static void manejar_tarjeta_ok() {
             if (eeprom_borrar_uid(uid_actual)) {
                 usart_enviar_string("OK:BORRADO");
                 usart_enviar_newline();
+                lcd_goto(1, 0); lcd_string("TARJETA BORRADA ");
             } else {
                 usart_enviar_string("ERROR:UID_NO_EXISTE");
                 usart_enviar_newline();
@@ -407,6 +460,7 @@ static void manejar_tarjeta_ok() {
 
         // Limpiar operacion pendiente
         op_pendiente = RFID_OP_NINGUNA;
+        rc522_halt();
         estado_rfid = RFID_ESTADO_PROCESANDO;
         return;
     }
@@ -418,6 +472,7 @@ static void manejar_tarjeta_ok() {
         acceso_denegado();
         usart_enviar_string("ACCESO:DENEGADO");
         usart_enviar_newline();
+        lcd_goto(1, 0); lcd_string("ACCESO DENEGADO ");
     } else {
         uint16_t dir = EEPROM_BASE_UIDS + (indice * 5);
         uint8_t tipo = eeprom_leer(dir + 4);
@@ -426,6 +481,7 @@ static void manejar_tarjeta_ok() {
             acceso_concedido_adulto();
             usart_enviar_string("ACCESO:CONCEDIDO_ADULTO");
             usart_enviar_newline();
+            lcd_goto(1, 0); lcd_string("ACCESO ADULTO   ");
         } else {
             uint8_t contador = 0;
             if (rfid_leer_contador(uid_actual, &contador)) {
@@ -436,6 +492,7 @@ static void manejar_tarjeta_ok() {
                         usart_enviar_string("ACCESO:CONCEDIDO_HIJO,");
                         usart_enviar_int(contador);
                         usart_enviar_newline();
+                        lcd_goto(1, 0); lcd_string("ACCESO HIJO     ");
                     } else {
                         acceso_denegado();
                         usart_enviar_string("ERROR:ESCRIBIR_CONTADOR");
@@ -445,6 +502,7 @@ static void manejar_tarjeta_ok() {
                     acceso_denegado();
                     usart_enviar_string("ACCESO:DENEGADO_SIN_CUPOS");
                     usart_enviar_newline();
+                    lcd_goto(1, 0); lcd_string("SIN CUPOS       ");
                 }
             } else {
                 acceso_denegado();
@@ -454,6 +512,7 @@ static void manejar_tarjeta_ok() {
         }
     }
 
+    rc522_halt();
     estado_rfid = RFID_ESTADO_PROCESANDO;
 }
 
@@ -462,8 +521,10 @@ static void manejar_tarjeta_ok() {
 // El sondeo de tarjeta se limita a ~1 vez cada 100ms para no bloquear el loop:
 // cada llamada a rfid_hay_tarjeta() tarda ~30-60ms (SPI a 1MHz + timer RC522),
 // por lo que llamarla en cada vuelta del loop destruye la respuesta del teclado.
-#define RFID_CICLOS_POLL  5   // sondear 1 de cada N llamadas a rfid_verificar()
-static uint8_t rfid_poll_cnt = 0;
+#define RFID_CICLOS_POLL    5     // sondear 1 de cada N llamadas en estado OCIOSO
+#define RFID_ESPERA_CIERRE  2000  // iteraciones en PROCESANDO antes de cerrar puerta
+static uint8_t  rfid_poll_cnt  = 0;
+static uint16_t rfid_proc_wait = 0;
 
 void rfid_verificar() {
 
@@ -482,13 +543,11 @@ void rfid_verificar() {
             break;
 
         case RFID_ESTADO_PROCESANDO:
-            if (++rfid_poll_cnt < RFID_CICLOS_POLL) break;
-            rfid_poll_cnt = 0;
-            if (!rfid_hay_tarjeta()) {
-                // Cerrar puerta cuando retiran la tarjeta
-                acceso_cerrar_principal();
-                estado_rfid = RFID_ESTADO_OCIOSO;
-            }
+            if (++rfid_proc_wait < RFID_ESPERA_CIERRE) break;
+            rfid_proc_wait = 0;
+            acceso_cerrar_principal();
+            lcd_goto(1, 0); lcd_string("                ");
+            estado_rfid = RFID_ESTADO_OCIOSO;
             break;
     }
 }
