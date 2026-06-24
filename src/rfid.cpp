@@ -12,6 +12,10 @@ extern void usart_enviar_int(int16_t n);
 extern void usart_enviar_newline();
 extern void lcd_goto(uint8_t row, uint8_t col);
 extern void lcd_string(const char* s);
+extern void lcd_int(int16_t n);
+// Reinicia el contador de inactividad del .ino para que la temperatura no
+// pise de inmediato el mensaje que el RFID escribe en el LCD.
+extern void rfid_notifica_lcd();
 
 // Llave por defecto para autenticacion MIFARE (todo 0xFF)
 static const uint8_t LLAVE_MIFARE[6] = LLAVE_DEFECTO;
@@ -23,6 +27,13 @@ static const uint8_t LLAVE_MIFARE[6] = LLAVE_DEFECTO;
 
 static uint8_t  estado_rfid = RFID_ESTADO_OCIOSO;
 static uint8_t  uid_actual[4];
+
+// Anti-relectura: recuerda la ultima tarjeta procesada para NO leerla muchas
+// veces si se deja puesta sobre el lector (el HALT no siempre frena al clon RC522).
+static uint8_t  rfid_ultimo_uid[4] = {0, 0, 0, 0};
+static uint8_t  rfid_uid_valido    = 0;   // 1 = hay una tarjeta recordada
+static uint16_t rfid_cooldown      = 0;   // >0 = ignorar esa misma tarjeta
+#define RFID_COOLDOWN  60                 // ciclos sin ver la tarjeta para "olvidarla"
 
 // Operacion pendiente (enrolar/borrar/recarga)
 #define RFID_OP_NINGUNA   0
@@ -363,6 +374,13 @@ uint8_t rfid_leer_uid(uint8_t* uid) {
         rc522_transceive(tx_sel, 9, sak, &sak_len);
     }
 
+    // Limpiar cualquier sesion crypto vieja: la tarjeta recien seleccionada
+    // todavia NO esta autenticada. Sin esto, un Crypto1On residual de la tarjeta
+    // anterior hace que la proxima autenticacion se SALTE (atajo en
+    // rc522_autenticar) y la primera lectura del bloque falle de forma
+    // intermitente (era el ERROR:LEER_CONTADOR al llegar a 0).
+    rc522_escribir_reg(RC522_REG_STATUS2, 0x00);
+
     return 1;
 }
 
@@ -390,21 +408,25 @@ static void rc522_calcular_crc(const uint8_t* datos, uint8_t len, uint8_t* crc) 
 uint8_t rfid_leer_contador(uint8_t* uid, uint8_t* valor) {
     uint8_t bloque[16];
 
-    // Autenticar con key A para el bloque del contador
-    if (!rc522_autenticar(TARJETA_BLOQUE_CONTADOR, uid)) return 0;
+    // Hasta 3 intentos: la comunicacion del RC522 clon falla a veces de forma
+    // intermitente (era el ERROR:LEER_CONTADOR). Se limpia el Crypto1On antes de
+    // cada intento para forzar una autenticacion fresca.
+    for (uint8_t intento = 0; intento < 3; intento++) {
 
-    // Comando READ: [0x30, bloque, CRC_L, CRC_H]. MIFARE EXIGE el CRC; sin el,
-    // la tarjeta ignora el comando y no devuelve datos (se leia 0 -> SIN_CUPOS).
-    uint8_t tx[4] = {PICC_CMD_READ, TARJETA_BLOQUE_CONTADOR, 0, 0};
-    rc522_calcular_crc(tx, 2, &tx[2]);
-    uint8_t rx_len = sizeof(bloque);
+        rc522_escribir_reg(RC522_REG_STATUS2, 0x00);   // autenticacion fresca
+        if (!rc522_autenticar(TARJETA_BLOQUE_CONTADOR, uid)) continue;
 
-    if (!rc522_transceive(tx, 4, bloque, &rx_len)) return 0;
-    if (rx_len < 16) return 0;   // respuesta valida = 16 bytes de datos del bloque
+        // Comando READ: [0x30, bloque, CRC_L, CRC_H]. MIFARE EXIGE el CRC.
+        uint8_t tx[4] = {PICC_CMD_READ, TARJETA_BLOQUE_CONTADOR, 0, 0};
+        rc522_calcular_crc(tx, 2, &tx[2]);
+        uint8_t rx_len = sizeof(bloque);
 
-    // El contador esta en el primer byte del bloque
-    *valor = bloque[0];
-    return 1;
+        if (rc522_transceive(tx, 4, bloque, &rx_len) && rx_len >= 16) {
+            *valor = bloque[0];   // el contador esta en el primer byte
+            return 1;
+        }
+    }
+    return 0;   // fallo tras 3 intentos
 }
 
 // -- rfid_escribir_contador() ----------------------------------------------
@@ -474,6 +496,19 @@ static void manejar_tarjeta_ok() {
         return;
     }
 
+    // ── ANTI-RELECTURA ──────────────────────────────────────────────────
+    // Si es la MISMA tarjeta que acabamos de procesar y aun esta en cooldown,
+    // NO la reproceses: solo refresca el cooldown. Asi, mientras siga puesta,
+    // nunca se vuelve a leer; se "olvida" sola al retirarla unos instantes.
+    if (rfid_uid_valido && rfid_cooldown > 0 &&
+        uid_actual[0] == rfid_ultimo_uid[0] && uid_actual[1] == rfid_ultimo_uid[1] &&
+        uid_actual[2] == rfid_ultimo_uid[2] && uid_actual[3] == rfid_ultimo_uid[3]) {
+        rfid_cooldown = RFID_COOLDOWN;
+        rc522_halt();
+        estado_rfid = RFID_ESTADO_OCIOSO;
+        return;
+    }
+
     // ── SI HAY OPERACION PENDIENTE, procesarla y salir ──────────────────
     if (op_pendiente != RFID_OP_NINGUNA) {
 
@@ -485,12 +520,13 @@ static void manejar_tarjeta_ok() {
                 if (op_tipo == 0) {
                     usart_enviar_string("OK:ENROLADO_ADULTO");
                     usart_enviar_newline();
-                    lcd_goto(1, 0); lcd_string("ENROLADO ADULTO ");
+                    lcd_goto(0, 0); lcd_string("ENROLADO ADULTO ");
                 } else {
                     usart_enviar_string("OK:ENROLADO_HIJO,");
                     usart_enviar_int(op_cupos);
                     usart_enviar_newline();
-                    lcd_goto(1, 0); lcd_string("ENROLADO HIJO   ");
+                    lcd_goto(0, 0); lcd_string("                ");
+                    lcd_goto(0, 0); lcd_string("ENROL HIJO C:"); lcd_int(op_cupos);
 
                     // Escribir cupos iniciales en la tarjeta
                     rfid_escribir_contador(uid_actual, op_cupos);
@@ -504,7 +540,7 @@ static void manejar_tarjeta_ok() {
             if (eeprom_borrar_uid(uid_actual)) {
                 usart_enviar_string("OK:BORRADO");
                 usart_enviar_newline();
-                lcd_goto(1, 0); lcd_string("TARJETA BORRADA ");
+                lcd_goto(0, 0); lcd_string("TARJETA BORRADA ");
             } else {
                 usart_enviar_string("ERROR:UID_NO_EXISTE");
                 usart_enviar_newline();
@@ -526,6 +562,8 @@ static void manejar_tarjeta_ok() {
                             usart_enviar_string("OK:ACCESOS,");
                             usart_enviar_int(nuevo);
                             usart_enviar_newline();
+                            lcd_goto(0, 0); lcd_string("                ");
+                            lcd_goto(0, 0); lcd_string("RECARGA C:"); lcd_int(nuevo);
                         } else {
                             usart_enviar_string("ERROR:ESCRIBIR_CONTADOR");
                             usart_enviar_newline();
@@ -546,6 +584,18 @@ static void manejar_tarjeta_ok() {
 
         // Limpiar operacion pendiente
         op_pendiente = RFID_OP_NINGUNA;
+
+        // Anti-relectura TAMBIEN aqui: recordar la tarjeta para NO procesarla
+        // otra vez como acceso mientras siga puesta tras enrolar/borrar/recargar.
+        // (Era el bug: al enrolar un hijo, la misma tarjeta bajaba el contador.)
+        rfid_ultimo_uid[0] = uid_actual[0];
+        rfid_ultimo_uid[1] = uid_actual[1];
+        rfid_ultimo_uid[2] = uid_actual[2];
+        rfid_ultimo_uid[3] = uid_actual[3];
+        rfid_uid_valido = 1;
+        rfid_cooldown   = RFID_COOLDOWN;
+
+        rfid_notifica_lcd();   // que la temperatura no pise el mensaje del RFID
         rc522_halt();
         estado_rfid = RFID_ESTADO_PROCESANDO;
         return;
@@ -558,7 +608,7 @@ static void manejar_tarjeta_ok() {
         acceso_denegado();
         usart_enviar_string("ACCESO:DENEGADO");
         usart_enviar_newline();
-        lcd_goto(1, 0); lcd_string("ACCESO DENEGADO ");
+        lcd_goto(0, 0); lcd_string("ACCESO DENEGADO ");
     } else {
         uint16_t dir = EEPROM_BASE_UIDS + (indice * 5);
         uint8_t tipo = eeprom_leer(dir + 4);
@@ -567,7 +617,7 @@ static void manejar_tarjeta_ok() {
             acceso_concedido_adulto();
             usart_enviar_string("ACCESO:CONCEDIDO_ADULTO");
             usart_enviar_newline();
-            lcd_goto(1, 0); lcd_string("ACCESO ADULTO   ");
+            lcd_goto(0, 0); lcd_string("ACCESO ADULTO   ");
         } else {
             uint8_t contador = 0;
             if (rfid_leer_contador(uid_actual, &contador)) {
@@ -578,7 +628,8 @@ static void manejar_tarjeta_ok() {
                         usart_enviar_string("ACCESO:CONCEDIDO_HIJO,");
                         usart_enviar_int(contador);
                         usart_enviar_newline();
-                        lcd_goto(1, 0); lcd_string("ACCESO HIJO     ");
+                        lcd_goto(0, 0); lcd_string("                ");
+                        lcd_goto(0, 0); lcd_string("HIJO OK C:"); lcd_int(contador);
                     } else {
                         acceso_denegado();
                         usart_enviar_string("ERROR:ESCRIBIR_CONTADOR");
@@ -588,16 +639,27 @@ static void manejar_tarjeta_ok() {
                     acceso_denegado();
                     usart_enviar_string("ACCESO:DENEGADO_SIN_CUPOS");
                     usart_enviar_newline();
-                    lcd_goto(1, 0); lcd_string("SIN CUPOS       ");
+                    lcd_goto(0, 0); lcd_string("SIN CUPOS       ");
                 }
             } else {
                 acceso_denegado();
                 usart_enviar_string("ERROR:LEER_CONTADOR");
                 usart_enviar_newline();
+                lcd_goto(0, 0); lcd_string("ERROR LECTURA   ");
             }
         }
     }
 
+    // Recordar esta tarjeta y armar el cooldown para no releerla mientras
+    // siga puesta sobre el lector (ver ANTI-RELECTURA arriba).
+    rfid_ultimo_uid[0] = uid_actual[0];
+    rfid_ultimo_uid[1] = uid_actual[1];
+    rfid_ultimo_uid[2] = uid_actual[2];
+    rfid_ultimo_uid[3] = uid_actual[3];
+    rfid_uid_valido = 1;
+    rfid_cooldown   = RFID_COOLDOWN;
+
+    rfid_notifica_lcd();   // que la temperatura no pise el mensaje del RFID
     rc522_halt();
     estado_rfid = RFID_ESTADO_PROCESANDO;
 }
@@ -617,6 +679,7 @@ void rfid_verificar() {
     switch (estado_rfid) {
 
         case RFID_ESTADO_OCIOSO:
+            if (rfid_cooldown > 0) rfid_cooldown--;  // se olvida la tarjeta al retirarla
             if (++rfid_poll_cnt < RFID_CICLOS_POLL) break;
             rfid_poll_cnt = 0;
             if (rfid_hay_tarjeta()) {
@@ -632,7 +695,8 @@ void rfid_verificar() {
             if (++rfid_proc_wait < RFID_ESPERA_CIERRE) break;
             rfid_proc_wait = 0;
             acceso_cerrar_principal();
-            lcd_goto(1, 0); lcd_string("                ");
+            // NO se borra la linea 0: el mensaje del RFID queda visible hasta el
+            // proximo evento (antes se borraba en ~ms y por eso "no se veia").
             estado_rfid = RFID_ESTADO_OCIOSO;
             break;
     }

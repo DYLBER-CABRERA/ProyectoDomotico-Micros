@@ -141,6 +141,18 @@ static uint16_t marquee_tick   = 0;  // vueltas del loop desde el ultimo paso
 //        Al normalizar antes de comparar, se acepta cualquier casing del usuario.
 // PARAMETRO: char* s — puntero al string a convertir (debe ser mutable, no literal).
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// rfid_notifica_lcd()
+// La llama el modulo RFID despues de escribir un mensaje en el LCD (acceso,
+// enrolamiento, etc.). Reinicia ultima_interaccion para que la temperatura NO
+// pise ese mensaje de inmediato y se pueda leer unos segundos en la pantalla.
+// (No es static: el modulo rfid.cpp la usa por 'extern'.)
+// ─────────────────────────────────────────────────────────────────────────────
+void rfid_notifica_lcd() {
+    ultima_interaccion = 0;
+}
+
+
 static void a_mayusculas(char* s) {
 
     // while (*s): desreferencia el puntero y evalua el caracter apuntado.
