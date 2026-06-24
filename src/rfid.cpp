@@ -93,12 +93,11 @@ static uint8_t rc522_transceive(const uint8_t* tx, uint8_t tx_len,
     // Activar la transmision seteando bit StartSend en BitFramingReg
     rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x80);
 
-    // Esperar a que termine (IdleIRq)
+    // Esperar RxIRq(0x20) | IdleIRq(0x10) | TimerIRq(0x01)
     uint16_t timeout = 0;
-    while (!(rc522_leer_reg(RC522_REG_COM_IRQ) & 0x10)) {
-        // Timeout aproximado (evitar cuelgue)
+    while (!(rc522_leer_reg(RC522_REG_COM_IRQ) & 0x31)) {
         timeout++;
-        if (timeout > 60000) return 0;
+        if (timeout > 3000) return 0;
     }
 
     // Verificar errores
@@ -137,11 +136,11 @@ static uint8_t rc522_transceive_reqa(uint8_t* respuesta) {
     // Activar transmision
     rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x87);  // 0x80 (start) | 0x07 (7 bits)
 
-    // Esperar
+    // Esperar RxIRq(0x20) | IdleIRq(0x10) | TimerIRq(0x01) — salir ante cualquiera
     uint16_t timeout = 0;
-    while (!(rc522_leer_reg(RC522_REG_COM_IRQ) & 0x10)) {
+    while (!(rc522_leer_reg(RC522_REG_COM_IRQ) & 0x31)) {
         timeout++;
-        if (timeout > 60000) return 0;
+        if (timeout > 3000) return 0;
     }
 
     uint8_t error = rc522_leer_reg(RC522_REG_ERROR);
@@ -169,13 +168,13 @@ static uint8_t rc522_autenticar(uint8_t bloque, const uint8_t* uid) {
     rc522_escribir_reg(RC522_REG_COMMAND, RC522_CMD_MFAUTHENT);
     rc522_escribir_reg(RC522_REG_BIT_FRAMING, 0x00);
 
-    // Esperar a que termine
+    // Esperar IdleIRq(0x10) | ErrIRq(0x02) | TimerIRq(0x01)
     uint16_t timeout = 0;
     for (;;) {
         uint8_t irq = rc522_leer_reg(RC522_REG_COM_IRQ);
-        if (irq & 0x10) break;  // IdleIRq
+        if (irq & 0x13) break;
         timeout++;
-        if (timeout > 60000) return 0;
+        if (timeout > 3000) return 0;
     }
 
     // Verificar que Crypto1On este activo
@@ -202,7 +201,7 @@ void rfid_init() {
     (void)version;  // se ignora en produccion; util para depuracion
 
     // Configurar timer del RC522 para timeout de comunicacion
-    rc522_escribir_reg(0x2A, 0x6D);  // TModeReg: timer autoinicio
+    rc522_escribir_reg(0x2A, 0x8D);  // TModeReg: TAuto=1 → timer arranca tras cada Tx
     rc522_escribir_reg(0x2B, 0x07);  // TPrescalerReg
     rc522_escribir_reg(0x2C, 0x00);  // TReloadRegH
     rc522_escribir_reg(0x2D, 0x3F);  // TReloadRegL (63 -> ~25ms con prescaler)
