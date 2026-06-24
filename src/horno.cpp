@@ -4,17 +4,19 @@
 #include <avr/io.h>
 #include "../include/horno.h"
 
+// Reloj del sistema en ms (definido en teclado.cpp, base ISR Timer2 ~10ms).
+extern uint32_t millis_sistema();
+
 
 // -- Variables internas (privadas de este modulo) ----------------------
 static uint8_t  estado_horno       = HORNO_APAGADO;
 static uint8_t  temp_objetivo      = 0;
 static uint16_t segundos_restantes = 0;
 
-// Contador de vueltas del loop para convertir "vueltas" en "segundos".
-// Mismo patron que usa temperatura.cpp con INTERVALO_TEMP, pero aqui
-// el intervalo representa 1 segundo real (ajustar segun velocidad del loop).
-static uint16_t contador_segundo = 0;
-#define VUELTAS_POR_SEGUNDO  4000  // ajustar experimentalmente si la cuenta va muy rapida/lenta
+// Marca de tiempo (ms) del ultimo "tic" de 1 segundo. Se usa TIEMPO REAL
+// (millis_sistema, base Timer2): 1000 ms = 1 segundo exacto, sin depender de
+// la velocidad del loop.
+static uint32_t ultimo_tick_horno = 0;
 
 
 // -- horno_init() -----------------------------------------------------------
@@ -31,24 +33,23 @@ void horno_init() {
     estado_horno       = HORNO_APAGADO;
     temp_objetivo       = 0;
     segundos_restantes  = 0;
-    contador_segundo    = 0;
+    ultimo_tick_horno   = 0;
 }
 
 
-// -- horno_encender(temp_objetivo, minutos) ----------------------------------
-void horno_encender(uint8_t temp, uint8_t minutos) {
+// -- horno_encender(temp_objetivo, segundos) ---------------------------------
+void horno_encender(uint8_t temp, uint8_t segundos) {
 
     temp_objetivo = temp;
 
-    // Convertir minutos a segundos para la cuenta regresiva interna
-    // uint16_t evita overflow: 255 min * 60 = 15300, cabe en 16 bits
-    segundos_restantes = (uint16_t)minutos * 60;
+    // El parametro ahora son SEGUNDOS directamente (ej. 5 -> cuenta 5 segundos).
+    segundos_restantes = segundos;
 
     // Encender el LED (simula activar el rele del horno)
     HORNO_PORT |= (1 << HORNO_PIN);
 
-    estado_horno    = HORNO_ENCENDIDO;
-    contador_segundo = 0; // reiniciar el contador de tiempo
+    estado_horno      = HORNO_ENCENDIDO;
+    ultimo_tick_horno = millis_sistema(); // empezar a contar desde ahora
 }
 
 
@@ -72,11 +73,9 @@ uint8_t horno_actualizar() {
         return 0;
     }
 
-    contador_segundo++;
-
-    // Cada VUELTAS_POR_SEGUNDO vueltas del loop, restar 1 segundo real
-    if (contador_segundo >= VUELTAS_POR_SEGUNDO) {
-        contador_segundo = 0;
+    // Cada 1000 ms reales, restar 1 segundo de la cuenta regresiva.
+    if (millis_sistema() - ultimo_tick_horno >= 1000) {
+        ultimo_tick_horno = millis_sistema();
 
         if (segundos_restantes > 0) {
             segundos_restantes--;
@@ -85,7 +84,7 @@ uint8_t horno_actualizar() {
         // Si la cuenta llego a 0, apagar automaticamente
         if (segundos_restantes == 0) {
             horno_apagar();
-            return 1; // avisar que el horno acaba de terminar en esta vuelta
+            return 1; // el horno acaba de terminar en esta vuelta
         }
     }
 

@@ -77,6 +77,10 @@ char teclado_leer();
 // Útil para revisar sin consumir la tecla.
 uint8_t teclado_hay();
 
+// Tiempo del sistema en milisegundos (base: ISR del Timer2, ~10ms).
+// Permite medir tiempo REAL sin depender de la velocidad del loop.
+uint32_t millis_sistema();
+
 // Cierra el include guard — todo lo declarado entre #ifndef y
 // aquí solo se procesa una vez por unidad de compilación
 #endif

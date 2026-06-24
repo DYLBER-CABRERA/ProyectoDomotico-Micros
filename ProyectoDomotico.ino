@@ -63,34 +63,24 @@ static char    buffer_codigo[ALARMA_CODIGO_LEN + 1];
 // uint8_t: entero de 8 bits sin signo (0-255), suficiente para un indice de 0 a 4.
 static uint8_t pos_codigo = 0;
 
-// Contador de iteraciones del loop() para temporizar la lectura de temperatura.
-// Se incrementa 1 vez por vuelta del loop. Al superar INTERVALO_TEMP se hace
-// la lectura del ADC y se evaluan los umbrales, luego se resetea a 0.
-// uint16_t: 16 bits sin signo (0-65535), necesario porque INTERVALO_TEMP = 2000.
-static uint16_t contador_temp = 0;
+// Marca de tiempo (ms) de la ultima lectura de temperatura. Ahora se usa TIEMPO
+// REAL (millis_sistema, base Timer2) en vez de "vueltas del loop", porque con el
+// RFID el loop se volvio lento y variable y la temperatura llegaba tardisimo.
+static uint32_t ultima_lectura_temp = 0;
 
-// Cantidad de ciclos del loop() entre lecturas consecutivas del sensor de temperatura.
-// #define: sustitucion textual en tiempo de compilacion, NO ocupa RAM (SRAM).
-// Con el loop corriendo a varios kHz, 2000 ciclos equivalen a aproximadamente
-// 2-3 segundos de intervalo entre lecturas (depende de la velocidad real del loop).
-#define INTERVALO_TEMP  2000
+// Cada cuantos MILISEGUNDOS se relee el sensor y se actualizan calefactor/ventilador.
+#define INTERVALO_TEMP  500   // 500 ms -> respuesta rapida del LCD y los actuadores
 
-// Contador de ciclos del loop() desde la ultima interaccion activa del usuario.
-// "Interaccion" = pulsacion de cualquier tecla O comando LUZ: por serial.
-// Se reinicia a 0 en esos eventos y se incrementa en cada vuelta del loop.
-// PROPOSITO: evitar que la actualizacion de temperatura pise el mensaje de codigo
-// en la linea 1 del LCD mientras el usuario esta digitando (el codigo necesita
-// toda la linea 1, que es mas ancha que el espacio T:+L:).
-// Se inicializa en 9999 (> TIEMPO_MOSTRAR_INTERACCION) para que al encender
-// la temperatura se muestre inmediatamente, sin esperar 12000 ciclos.
-static uint16_t ultima_interaccion = 9999;
+// Marca de tiempo (ms) de la ultima interaccion activa del usuario.
+// "Interaccion" = pulsacion de cualquier tecla, comando LUZ:, o evento RFID.
+// PROPOSITO: evitar que la temperatura pise el mensaje de codigo/RFID en el LCD
+// mientras el usuario esta interactuando. Se actualiza a millis_sistema() en esos
+// eventos. Inicia en 0: la temperatura aparece ~TIEMPO_MOSTRAR_INTERACCION tras el arranque.
+static uint32_t ultima_interaccion = 0;
 
-// Umbral de ciclos sin interaccion antes de que la temperatura pueda actualizar el LCD.
-// Logica: si ultima_interaccion >= TIEMPO_MOSTRAR_INTERACCION → linea 1 libre → mostrar temp.
-//         si ultima_interaccion <  TIEMPO_MOSTRAR_INTERACCION → usuario activo → NO pisar LCD.
-// Aumentar este valor hace que el mensaje de codigo/luz permanezca mas tiempo visible
-// antes de que la temperatura vuelva a aparecer en la mitad izquierda de la linea 1.
-#define TIEMPO_MOSTRAR_INTERACCION  12000
+// Milisegundos sin interaccion antes de que la temperatura pueda actualizar el LCD.
+// Si (millis - ultima_interaccion) >= este valor -> linea libre -> mostrar temp.
+#define TIEMPO_MOSTRAR_INTERACCION  3000  // 3 s
 
 
 // ─── MODO COMANDO POR TECLADO (entrenador sin terminal serial) ──────────────
@@ -149,7 +139,7 @@ static uint16_t marquee_tick   = 0;  // vueltas del loop desde el ultimo paso
 // (No es static: el modulo rfid.cpp la usa por 'extern'.)
 // ─────────────────────────────────────────────────────────────────────────────
 void rfid_notifica_lcd() {
-    ultima_interaccion = 0;
+    ultima_interaccion = millis_sistema();
 }
 
 
@@ -223,16 +213,16 @@ static void procesar_tecla_alarma(char tecla) {
     // '*' es el prefijo universal de comandos por teclado (ver COMANDOS_TECLADO.md).
     // Si ya estabamos en modo comando, '*' cancela y vuelve a modo normal.
     if (tecla == '*') {
-        ultima_interaccion = 0;
+        ultima_interaccion = millis_sistema();
         if (modo_comando) {
             modo_comando = 0;
-            lcd_goto(1, 0);
+            lcd_goto(0, 0);   // CMD en linea 0 para NO chocar con la temperatura (linea 1)
             lcd_string("CMD CANCELADO   ");
         } else {
             modo_comando = 1;
             cmd_pos = 0;
             cmd_buffer[0] = '\0';
-            lcd_goto(1, 0);
+            lcd_goto(0, 0);   // CMD en linea 0 (no choca con temperatura)
             lcd_string("CMD:            "); // pista visual de que se espera el comando
         }
         return;
@@ -240,13 +230,13 @@ static void procesar_tecla_alarma(char tecla) {
 
     // ── EN MODO COMANDO: acumular digitos / 'A' (separador) y ejecutar con '#'
     if (modo_comando) {
-        ultima_interaccion = 0;
+        ultima_interaccion = millis_sistema();
 
         // '#': ejecutar el comando acumulado y salir del modo comando
         if (tecla == '#') {
             modo_comando = 0;
-            lcd_goto(1, 0);
-            lcd_string("                "); // borrar el eco "CMD:31180A6..." de la fila 1
+            lcd_goto(0, 0);   // limpiar el CMD de la linea 0 antes de ejecutar
+            lcd_string("                "); // borrar el eco "CMD:31180A6..."
             ejecutar_comando_teclado(cmd_buffer);
             return;
         }
@@ -258,8 +248,8 @@ static void procesar_tecla_alarma(char tecla) {
                 cmd_buffer[cmd_pos++] = tecla;
                 cmd_buffer[cmd_pos]   = '\0';
             }
-            // Eco en el LCD para que el usuario vea lo que lleva tecleado
-            lcd_goto(1, 0);
+            // Eco en el LCD (linea 0) para que el usuario vea lo que lleva tecleado
+            lcd_goto(0, 0);
             lcd_string("CMD:");
             lcd_string(cmd_buffer);
             for (uint8_t i = 4 + cmd_pos; i < 16; i++) lcd_char(' '); // limpiar resto
@@ -271,7 +261,7 @@ static void procesar_tecla_alarma(char tecla) {
     // Cualquier tecla pulsada cuenta como "interaccion activa".
     // Reiniciar el contador a 0 para que la temperatura NO pise la linea 1 del LCD
     // mientras el usuario esta en medio de digitar un codigo o ajustar el dimmer.
-    ultima_interaccion = 0;
+    ultima_interaccion = millis_sistema();
 
     // ── DIGITOS 0-9 ─────────────────────────────────────────────────────────
     // tecla >= '0' && tecla <= '9': comparacion con los codigos ASCII de los digitos.
@@ -293,10 +283,9 @@ static void procesar_tecla_alarma(char tecla) {
             // y alarma_verificar_codigo() leeran basura de memoria mas alla del codigo.
             buffer_codigo[pos_codigo]   = '\0';
 
-            // Mostrar el codigo enmascarado en TODA la linea 1 del LCD.
-            // "Codigo: ****" ocupa 12 columnas, mas largo que el espacio de T:+L: (15 cols),
-            // por eso pisa temporalmente la temperatura y la luz mientras se digita.
-            lcd_goto(1, 0);               // mover cursor a linea 1, columna 0
+            // Mostrar el codigo enmascarado en la LINEA 0 (asi no choca con la
+            // temperatura/luz de la linea 1, que era el problema reportado).
+            lcd_goto(0, 0);               // linea 0, columna 0
             lcd_string("Codigo: ");       // prefijo fijo de 8 caracteres
 
             // Mostrar un '*' por cada digito ya ingresado (enmascarar para seguridad).
@@ -536,7 +525,7 @@ static void procesar_comando_serial(char* comando) {
         // Marcar interaccion: evitar que la temperatura pise el nivel de luz en LCD.
         // El usuario acaba de ajustar la luz — debe poder verla al menos TIEMPO_MOSTRAR
         // ciclos antes de que T: vuelva a aparecer en la misma linea.
-        ultima_interaccion = 0;
+        ultima_interaccion = millis_sistema();
 
         // Mostrar en la mitad DERECHA de la linea 1 (columnas 9-15), igual que teclado C/D.
         // Consistencia: el usuario ve la luz en la misma posicion independientemente
@@ -593,7 +582,7 @@ static void procesar_comando_serial(char* comando) {
 
      } else if (strncmp(comando, "HORNO:", 6) == 0) {
 
-        // Formato: HORNO:<temp>,<min>  ej. "HORNO:180,25"
+        // Formato: HORNO:<temp>,<segundos>  ej. "HORNO:180,5" -> 5 segundos
         // comando+6 apunta a "180,25"
         char* args = comando + 6;
 
@@ -611,7 +600,7 @@ static void procesar_comando_serial(char* comando) {
         lcd_goto(0, 0); lcd_string("HORNO:          "); // plantilla limpia 16 chars
         lcd_goto(0, 6); lcd_int(temp); lcd_char('C');   // temperatura en col 6
         lcd_goto(1, 9); lcd_string("       ");          // limpiar mitad derecha fila 1
-        lcd_goto(1, 9); lcd_int(minutos); lcd_string("min"); // minutos en cols 9+
+        lcd_goto(1, 9); lcd_int(minutos); lcd_string("s"); // segundos en cols 9+
 
         usart_enviar_string("OK:HORNO,");
         usart_enviar_int(temp);
@@ -970,7 +959,7 @@ static void ejecutar_comando_teclado(char* cmd) {
             lcd_goto(0, 0); lcd_string("HORNO:          "); // plantilla limpia
             lcd_goto(0, 6); lcd_int(p1); lcd_char('C');     // temperatura en col 6
             lcd_goto(1, 9); lcd_string("       ");          // limpiar mitad derecha fila 1
-            lcd_goto(1, 9); lcd_int(p2); lcd_string("min"); // minutos en cols 9+
+            lcd_goto(1, 9); lcd_int(p2); lcd_string("s"); // segundos en cols 9+
             usart_enviar_string("OK:HORNO,");
             usart_enviar_int(p1); usart_enviar_string(",");
             usart_enviar_int(p2); usart_enviar_newline();
@@ -1268,25 +1257,19 @@ void loop() {
     marquee_actualizar();
 
     // ── 4. TEMPERATURA Y TEMPORIZADO (Fase 6) ────────────────────────────────
-    // Incrementar los dos contadores en cada vuelta del loop.
-    // No se usan delays ni timers adicionales — el propio paso del tiempo
-    // del loop sirve como base de tiempo imprecisa pero funcional.
-    contador_temp++;       // avanzar hacia el umbral de lectura de temperatura
-    ultima_interaccion++;  // avanzar hacia el umbral de "usuario inactivo"
+    // Base de tiempo REAL (millis_sistema, Timer2) en vez de "vueltas del loop":
+    // asi la temperatura y los actuadores responden cada INTERVALO_TEMP ms aunque
+    // el RFID haga el loop lento/variable (antes llegaban tardisimo al LCD).
+    if (millis_sistema() - ultima_lectura_temp >= INTERVALO_TEMP) {
 
-    // Cuando el contador de temperatura alcanza INTERVALO_TEMP (2000 ciclos):
-    if (contador_temp >= INTERVALO_TEMP) {
-
-        contador_temp = 0; // reiniciar el contador para el proximo intervalo
+        ultima_lectura_temp = millis_sistema(); // marcar el momento de esta lectura
 
         // CONDICION DEL LCD: solo actualizar la mitad izquierda de la linea 1
-        // si el usuario lleva suficientes ciclos sin interactuar con el codigo/luz.
-        // Si ultima_interaccion < TIEMPO_MOSTRAR_INTERACCION, el usuario
-        // acaba de pulsar una tecla o ajustar la luz — NO pisar el mensaje en LCD.
+        // si el usuario lleva TIEMPO_MOSTRAR_INTERACCION ms sin interactuar.
         // IMPORTANTE: temp_controlar() (calefactor/ventilador) se ejecuta SIEMPRE
-        // independientemente de esta condicion — la seguridad termica no se puede
-        // pausar solo porque el usuario este digitando un codigo.
-        if (ultima_interaccion >= TIEMPO_MOSTRAR_INTERACCION) {
+        // independientemente de esta condicion — la seguridad termica no se pausa
+        // solo porque el usuario este digitando un codigo.
+        if (millis_sistema() - ultima_interaccion >= TIEMPO_MOSTRAR_INTERACCION) {
 
             int8_t temp_actual = temp_celsius(); // leer temperatura del ADC (promedio de 8 muestras)
 

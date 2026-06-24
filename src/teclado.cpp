@@ -64,6 +64,13 @@ static volatile uint8_t lectura_previa  = 0xFF; // ultima lectura cruda vista
 static volatile uint8_t cuenta_estable  = 0;    // lecturas iguales seguidas
 static volatile uint8_t tecla_reportada = 0xFF; // ultimo estado ESTABLE aceptado
 
+// -- RELOJ DEL SISTEMA (base de tiempo REAL) ----------------------------
+// La ISR del Timer2 late cada ~10ms sin importar lo rapido/lento que vaya
+// el loop. Aqui llevamos los milisegundos para que el horno y la temperatura
+// midan TIEMPO REAL (antes contaban "vueltas del loop", que con el RFID se
+// volvieron lentas y variables). Lo leen otros modulos con millis_sistema().
+static volatile uint32_t ms_sistema = 0;
+
 // ============================================================
 // escanear_columna(col)
 // FUNCIÓN PRIVADA — no declarada en el .h
@@ -217,6 +224,9 @@ static uint8_t escanear_crudo() {
 // pulsacion se registra UNA sola vez, de forma fiable y rapida (~20ms).
 ISR(TIMER2_COMPA_vect) {
 
+    // Reloj del sistema: esta ISR late cada ~10 ms (base de tiempo real).
+    ms_sistema += 10;
+
     // Lectura cruda del estado fisico AHORA (codigo 0-15, o 0xFF si nada)
     uint8_t actual = escanear_crudo();
 
@@ -299,7 +309,10 @@ void teclado_init() {
     // TCCR2B: registro de control B del Timer2
     // CS22=1, CS21=0, CS20=1 → prescaler 1024
     // El reloj del timer = F_CPU / 1024 = 16MHz / 1024 = 15625 Hz
-    TCCR2B = (1 << CS22) | (1 << CS20);
+    // OJO: en el Timer2, 111 = /1024 (en Timer0/1 seria distinto). Antes habia
+    // 101, que en Timer2 es /128 -> la ISR latia ~8x mas rapido de lo previsto,
+    // y por eso el reloj de ms (y el horno) contaban acelerados. Corregido a /1024.
+    TCCR2B = (1 << CS22) | (1 << CS21) | (1 << CS20);
 
     // OCR2A: valor de comparación
     // Para interrupción cada 10ms con prescaler 1024:
@@ -353,5 +366,21 @@ uint8_t teclado_hay() {
     // Retorna directamente el valor de la bandera
     // 0 = no hay tecla, 1 = hay tecla esperando
     return hay_tecla;
+}
+
+
+// ============================================================
+// millis_sistema()
+// Tiempo del sistema en milisegundos (base: ISR del Timer2, ~10ms).
+// Sirve para medir tiempo REAL (horno, temperatura) sin depender de la
+// velocidad del loop. Lectura atomica de los 4 bytes (se modifica en ISR).
+// ============================================================
+uint32_t millis_sistema() {
+    uint32_t v;
+    uint8_t  s = SREG;   // guardar estado (bit I de interrupciones)
+    cli();               // leer los 4 bytes sin que la ISR los cambie a media lectura
+    v = ms_sistema;
+    SREG = s;            // restaurar interrupciones como estaban
+    return v;
 }
 
