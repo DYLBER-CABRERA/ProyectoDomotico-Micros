@@ -198,7 +198,9 @@ void rfid_init() {
 
     // Verificar version del chip (debe ser 0x91 o 0x92)
     uint8_t version = rc522_leer_reg(RC522_REG_VERSION);
-    (void)version;  // se ignora en produccion; util para depuracion
+    usart_enviar_string("RC522 VER:0x");
+    usart_enviar_int(version);
+    usart_enviar_newline();
 
     // Configurar timer del RC522 para timeout de comunicacion
     rc522_escribir_reg(0x2A, 0x8D);  // TModeReg: TAuto=1 → timer arranca tras cada Tx
@@ -457,11 +459,19 @@ static void manejar_tarjeta_ok() {
 
 // -- rfid_verificar() ------------------------------------------------------
 // Maquina de estados no bloqueante llamada desde loop()
+// El sondeo de tarjeta se limita a ~1 vez cada 100ms para no bloquear el loop:
+// cada llamada a rfid_hay_tarjeta() tarda ~30-60ms (SPI a 1MHz + timer RC522),
+// por lo que llamarla en cada vuelta del loop destruye la respuesta del teclado.
+#define RFID_CICLOS_POLL  5   // sondear 1 de cada N llamadas a rfid_verificar()
+static uint8_t rfid_poll_cnt = 0;
+
 void rfid_verificar() {
 
     switch (estado_rfid) {
 
         case RFID_ESTADO_OCIOSO:
+            if (++rfid_poll_cnt < RFID_CICLOS_POLL) break;
+            rfid_poll_cnt = 0;
             if (rfid_hay_tarjeta()) {
                 estado_rfid = RFID_ESTADO_TARJETA_OK;
             }
@@ -472,6 +482,8 @@ void rfid_verificar() {
             break;
 
         case RFID_ESTADO_PROCESANDO:
+            if (++rfid_poll_cnt < RFID_CICLOS_POLL) break;
+            rfid_poll_cnt = 0;
             if (!rfid_hay_tarjeta()) {
                 // Cerrar puerta cuando retiran la tarjeta
                 acceso_cerrar_principal();
