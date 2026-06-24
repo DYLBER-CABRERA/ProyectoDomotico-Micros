@@ -16,6 +16,10 @@ extern void lcd_int(int16_t n);
 // Reinicia el contador de inactividad del .ino para que la temperatura no
 // pise de inmediato el mensaje que el RFID escribe en el LCD.
 extern void rfid_notifica_lcd();
+// Lugar seleccionado con los 2 pulsadores (LUGAR_PUERTA/GARAJE/SALA), y
+// arranque del retardo de desarme tras conceder acceso (definidos en el .ino).
+extern uint8_t obtener_lugar();
+extern void acceso_iniciar_retardo(uint8_t segundos);
 
 // Llave por defecto para autenticacion MIFARE (todo 0xFF)
 static const uint8_t LLAVE_MIFARE[6] = LLAVE_DEFECTO;
@@ -610,43 +614,64 @@ static void manejar_tarjeta_ok() {
         usart_enviar_newline();
         lcd_goto(0, 0); lcd_string("ACCESO DENEGADO ");
     } else {
-        uint16_t dir = EEPROM_BASE_UIDS + (indice * 5);
-        uint8_t tipo = eeprom_leer(dir + 4);
+        // La tarjeta esta autorizada. La ACCION depende del LUGAR seleccionado
+        // con los 2 pulsadores, NO del tipo de tarjeta:
+        //   PUERTA  -> conceder + 10s para desarmar con codigo
+        //   GARAJE  -> conceder + 15s para desarmar con codigo
+        //   SALA    -> contador de cupos del nino (descuenta 1 por ingreso)
+        uint8_t lugar = obtener_lugar();
 
-        if (tipo == 0) {
-            acceso_concedido_adulto();
-            usart_enviar_string("ACCESO:CONCEDIDO_ADULTO");
-            usart_enviar_newline();
-            lcd_goto(0, 0); lcd_string("ACCESO ADULTO   ");
-        } else {
-            uint8_t contador = 0;
-            if (rfid_leer_contador(uid_actual, &contador)) {
-                if (contador > 0) {
-                    contador--;
-                    if (rfid_escribir_contador(uid_actual, contador)) {
-                        acceso_concedido_hijo();
-                        usart_enviar_string("ACCESO:CONCEDIDO_HIJO,");
-                        usart_enviar_int(contador);
-                        usart_enviar_newline();
-                        lcd_goto(0, 0); lcd_string("                ");
-                        lcd_goto(0, 0); lcd_string("HIJO OK C:"); lcd_int(contador);
+        if (lugar == LUGAR_SALA) {
+            // ── SALA DE JUEGOS: el ADULTO entra libre; el HIJO descuenta 1 cupo
+            uint16_t dir_s = EEPROM_BASE_UIDS + (indice * 5);
+            uint8_t  tipo_s = eeprom_leer(dir_s + 4);   // 0=adulto, 1=hijo
+
+            if (tipo_s == 0) {
+                // Adulto: acceso libre a la sala, sin tocar el contador
+                usart_enviar_string("ACCESO:CONCEDIDO_ADULTO"); usart_enviar_newline();
+                lcd_goto(0, 0); lcd_string("SALA: ADULTO    ");
+
+            } else {
+                // Hijo: logica del contador de cupos
+                uint8_t contador = 0;
+                if (rfid_leer_contador(uid_actual, &contador)) {
+                    if (contador > 0) {
+                        contador--;
+                        if (rfid_escribir_contador(uid_actual, contador)) {
+                            acceso_concedido_hijo();
+                            usart_enviar_string("ACCESO:CONCEDIDO_HIJO,");
+                            usart_enviar_int(contador); usart_enviar_newline();
+                            lcd_goto(0, 0); lcd_string("                ");
+                            lcd_goto(0, 0); lcd_string("SALA OK C:"); lcd_int(contador);
+                        } else {
+                            acceso_denegado();
+                            usart_enviar_string("ERROR:ESCRIBIR_CONTADOR"); usart_enviar_newline();
+                        }
                     } else {
                         acceso_denegado();
-                        usart_enviar_string("ERROR:ESCRIBIR_CONTADOR");
-                        usart_enviar_newline();
+                        usart_enviar_string("ACCESO:DENEGADO_SIN_CUPOS"); usart_enviar_newline();
+                        lcd_goto(0, 0); lcd_string("SALA SIN CUPOS  ");
                     }
                 } else {
                     acceso_denegado();
-                    usart_enviar_string("ACCESO:DENEGADO_SIN_CUPOS");
-                    usart_enviar_newline();
-                    lcd_goto(0, 0); lcd_string("SIN CUPOS       ");
+                    usart_enviar_string("ERROR:LEER_CONTADOR"); usart_enviar_newline();
+                    lcd_goto(0, 0); lcd_string("ERROR LECTURA   ");
                 }
-            } else {
-                acceso_denegado();
-                usart_enviar_string("ERROR:LEER_CONTADOR");
-                usart_enviar_newline();
-                lcd_goto(0, 0); lcd_string("ERROR LECTURA   ");
             }
+
+        } else if (lugar == LUGAR_GARAJE) {
+            // ── GARAJE: abrir + 15s para desarmar ───────────────────────
+            acceso_abrir_garaje();
+            usart_enviar_string("ACCESO:CONCEDIDO_GARAJE"); usart_enviar_newline();
+            lcd_goto(0, 0); lcd_string("ACCESO GARAJE   ");
+            acceso_iniciar_retardo(15);
+
+        } else {
+            // ── PUERTA PRINCIPAL: abrir iman + 10s para desarmar ────────
+            acceso_concedido_adulto();
+            usart_enviar_string("ACCESO:CONCEDIDO_PUERTA"); usart_enviar_newline();
+            lcd_goto(0, 0); lcd_string("ACCESO PUERTA   ");
+            acceso_iniciar_retardo(10);
         }
     }
 

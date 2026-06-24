@@ -27,6 +27,7 @@
 
 // -- API publica ------------------------------------------------------
 void lcd_init();                          // inicializar el LCD (llamar 1 vez)
+void lcd_resync();                        // re-sincronizar el LCD si se corrompio (sin borrar)
 void lcd_cmd(uint8_t cmd);                // enviar comando al LCD
 void lcd_char(char c);                    // enviar un caracter a mostrar
 void lcd_string(const char* s);           // enviar cadena de texto

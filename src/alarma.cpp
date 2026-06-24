@@ -246,6 +246,17 @@ void alarma_reset_intentos() {
 }
 
 
+// -- alarma_disparar_intruso() ------------------------------------------------
+// Fuerza el disparo como INTRUSO (igual que superar los intentos): estado
+// DISPARADA, tipo INTRUSO y LED rojo encendido. Lo usa el retardo de entrada
+// cuando vence el tiempo sin desarmar tras un acceso por RFID.
+void alarma_disparar_intruso() {
+    estado_acceso       = ALARMA_DISPARADA;
+    tipo_disparo_actual = ALARMA_TIPO_INTRUSO;
+    PORTB |= (1 << LED_DISPARADA);   // encender LED rojo ("sirena")
+}
+
+
 // -- alarma_intentos_restantes() ----------------------------------------------
 // Cuantos intentos quedan antes de disparar la alarma de intruso.
 uint8_t alarma_intentos_restantes() {

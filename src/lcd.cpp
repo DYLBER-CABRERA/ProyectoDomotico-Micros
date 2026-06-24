@@ -331,3 +331,29 @@ void lcd_init() {
     // Llama internamente a lcd_cmd(0x01) + delay de 2ms
     lcd_clear();
 }
+
+
+// ------------------------------------------------------------
+// lcd_resync()
+// Re-sincroniza el controlador HD44780 en modo 4 bits SIN borrar la pantalla
+// ni hacer el wait de arranque. Sirve para RECUPERAR el LCD cuando el ruido
+// (servo, RF, cables del entrenador) lo desincroniza y queda mostrando basura.
+// No genera parpadeo (no usa clear). El contenido se repinta aparte.
+// ------------------------------------------------------------
+void lcd_resync() {
+
+    LCD_DDR = 0xFF;                  // asegurar Puerto A como salida
+    LCD_PORT &= ~(1 << LCD_RS);      // RS=0 -> modo comando
+
+    // Secuencia del datasheet para realinear a 4 bits desde CUALQUIER estado
+    // (recupera el desfase de nibbles que causa la "basura" en pantalla).
+    enviar_nibble(0x3); _delay_us(200);
+    enviar_nibble(0x3); _delay_us(200);
+    enviar_nibble(0x3); _delay_us(200);
+    enviar_nibble(0x2); _delay_us(200);
+
+    lcd_cmd(0x28);   // Function set: 4 bits, 2 lineas, 5x8
+    lcd_cmd(0x0C);   // Display ON, cursor OFF
+    lcd_cmd(0x06);   // Entry mode: cursor incrementa
+    // (sin lcd_clear -> sin parpadeo; el contenido se repinta despues)
+}

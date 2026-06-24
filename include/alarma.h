@@ -92,4 +92,9 @@ void alarma_reset_intentos();
 // Retorna cuantos intentos quedan antes de disparar la alarma de intruso.
 uint8_t alarma_intentos_restantes();
 
+// Fuerza el disparo de la alarma como INTRUSO (estado DISPARADA + LED rojo).
+// Lo usa el retardo de entrada: si tras conceder acceso por RFID no se desarma
+// con el codigo dentro del tiempo, se considera intrusion.
+void alarma_disparar_intruso();
+
 #endif

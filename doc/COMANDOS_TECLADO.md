@@ -1,95 +1,144 @@
-# Comandos por teclado — Sistema Domótico (entrenador sin terminal)
+# Comandos del sistema — teclado y serial (USART)
 
-En el **entrenador físico** solo se dispone del **teclado 4×4** (no hay terminal serial
-para escribir comandos como `SONIDO:ON,75`). Por eso el firmware incorpora un **modo
-comando por teclado**: una secuencia de teclas activa cada función.
+Sistema Domótico sobre **ATmega2560**. Se controla de dos formas equivalentes:
 
-> En **Proteus** sí hay terminal virtual, así que **los comandos serial siguen
-> funcionando** además del teclado. Mismo firmware para los dos escenarios.
+- **Teclado 4×4** (entrenador físico): un *modo comando* con secuencias de teclas.
+- **Terminal serial / USART** a **9600 8N1** (Proteus o monitor serie): comandos de texto.
+
+Mismo firmware para ambos escenarios. Esta es la referencia completa y actualizada.
 
 ---
 
-## 1. Cómo funciona el modo comando
+## 1. Modo comando por teclado
 
 ```
-   *  +  [código de 2 dígitos]  +  [parámetros]  +  #
+   *  +  [código de función de 2 dígitos]  +  [parámetros]  +  #
 ```
 
 | Tecla | Significado |
 |-------|-------------|
 | `*` | **Inicia** el comando. Pulsada de nuevo, **cancela**. |
 | `0`–`9` | Código de función y parámetros. |
-| `A` | **Separador** de parámetros (solo para horno y agregar al mercado). |
+| `A` | **Separador** de parámetros (horno, mercado-agregar, enrolar hijo, recargar). |
 | `#` | **Ejecuta** el comando. |
 
-Mientras escribes, el LCD muestra `CMD:` con lo que llevas tecleado. Si te equivocas,
-pulsa `*` para cancelar y empieza de nuevo.
+Mientras escribes, el LCD muestra `CMD:` con lo que llevas tecleado (en la línea 0). Si te
+equivocas, pulsa `*` para cancelar.
 
-**Ejemplo:** encender el equipo de sonido al 75 % →  `*` `2` `1` `7` `5` `#`
-(es decir: inicia, función `21` = sonido ON, parámetro `75`, ejecuta).
+**Ejemplo:** encender el sonido al nivel 7 → `*` `2` `1` `7` `#` (función `21`, parámetro `7`).
 
 ---
 
-## 2. Teclas directas (sin modo comando)
-
-Estas funcionan en el modo normal, sin `*`, por ser las más frecuentes:
+## 2. Teclas directas (sin `*`)
 
 | Tecla | Acción |
 |-------|--------|
 | `0`–`9` | Teclear el **código de la alarma** (4 dígitos). |
-| `A` | **Armar** la alarma de acceso (después de teclear el código correcto). |
-| `B` | **Desarmar** la alarma de acceso (después de teclear el código correcto). |
+| `A` | **Armar** la alarma de acceso (tras teclear el código correcto). |
+| `B` | **Desarmar** la alarma de acceso (tras teclear el código correcto). |
 | `C` | **Subir** la luz un nivel (dimmer +1, máx. 10). |
 | `D` | **Bajar** la luz un nivel (dimmer −1, mín. 0). |
 
-> Ejemplo armar por teclado directo: `1` `2` `3` `4` luego `A`.
+> Armar por teclado directo: `1` `2` `3` `4` y luego `A`. (Código por defecto: **1234**.)
 
 ---
 
-## 3. Tabla de comandos (modo `*` … `#`)
+## 3. Tabla de comandos por teclado (`*` … `#`)
 
-| Función | Secuencia | Ejemplo | Parámetros |
-|---------|-----------|---------|------------|
-| **Garaje abrir** | `*` `11` `#` | `*11#` | — |
-| **Garaje cerrar** | `*` `10` `#` | `*10#` | — |
-| **Sonido encender** | `*` `21` `#` | `*21#` | el **volumen lo fija el potenciómetro A13** |
-| **Sonido apagar** | `*` `20` `#` | `*20#` | — |
-| **Horno encender** | `*` `31` `‹temp›` `A` `‹min›` `#` | `*31180A25#` → 180 °C, 25 min | temp y min (0–255) |
-| **Horno apagar** | `*` `30` `#` | `*30#` | — |
-| **Luz a nivel fijo** | `*` `41` `‹nivel›` `#` | `*415#` → nivel 5 | nivel = 0–10 |
-| **Mercado: agregar** | `*` `51` `‹cod›` `A` `‹cant›` `#` | `*5101A2#` → leche ×2 | cod = producto (§4), cant = 0–255 |
-| **Mercado: eliminar** | `*` `50` `‹cod›` `#` | `*5001#` → quita leche | cod = producto (§4) |
-| **Mercado: listar (LCD)** | `*` `59` `#` | `*59#` | — (muestra la lista en el LCD) |
-| **Enrolar adulto** | `*` `61` `‹código›` `#` | `*611234#` | código alarma de 4 dígitos |
-| **Enrolar hijo** | `*` `62` `‹cupos›` `A` `‹código›` `#` | `*625A1234#` → 5 cupos | cupos + código alarma |
-| **Borrar tarjeta** | `*` `60` `‹código›` `#` | `*601234#` | código alarma de 4 dígitos |
-| **Alarma armar** | `*` `91` `‹código›` `#` | `*911234#` | código de 4 dígitos |
-| **Alarma desarmar** | `*` `90` `‹código›` `#` | `*901234#` | código de 4 dígitos |
+| Función | Secuencia | Ejemplo | Notas |
+|---------|-----------|---------|-------|
+| **Garaje abrir** | `*11#` | `*11#` | — |
+| **Garaje cerrar** | `*10#` | `*10#` | — |
+| **Sonido encender** | `*21‹vol›#` | `*217#` → vol 7 | vol 0–10 |
+| **Sonido apagar** | `*20#` | `*20#` | — |
+| **Volumen +/−** | `*22#` / `*23#` | `*22#` | solo con el sonido encendido |
+| **Horno encender** | `*31‹temp›A‹seg›#` | `*31180A5#` → 180 °C, **5 s** | temp y **segundos** (0–255) |
+| **Horno apagar** | `*30#` | `*30#` | — |
+| **Luz a nivel fijo** | `*41‹nivel›#` | `*417#` → nivel 7 | nivel 0–10 |
+| **Mercado: agregar** | `*51‹cod›A‹cant›#` | `*5101A2#` → leche ×2 | si ya existe, **reemplaza** la cantidad |
+| **Mercado: eliminar** | `*50‹cod›#` | `*5001#` → quita leche | cod = producto (§6) |
+| **Mercado: listar** | `*59#` | `*59#` | lista por serial; conteo en LCD |
+| **Enrolar adulto** | `*61‹código›#` | `*611234#` | luego pasar la tarjeta |
+| **Enrolar hijo** | `*62‹cupos›A‹código›#` | `*625A1234#` → 5 cupos | luego pasar la tarjeta del niño |
+| **Recargar cupos hijo** | `*63‹cantidad›A‹código›#` | `*635A1234#` → +5 | luego pasar la tarjeta del niño |
+| **Borrar tarjeta** | `*60‹código›#` | `*601234#` | luego pasar la tarjeta a borrar |
+| **Alarma armar** | `*91‹código›#` | `*911234#` | equivale a la tecla `A` |
+| **Alarma desarmar** | `*90‹código›#` | `*901234#` | equivale a la tecla `B` |
 
-> El armado/desarmado por `*91`/`*90` es equivalente a las teclas directas `A`/`B`; se
-> incluye para tener todo bajo el mismo esquema. Ambos exigen el código (RF-04).
->
-> Las funciones RFID (6x) también requieren el código de alarma para evitar que cualquier
-> persona enrole tarjetas.
+> Las funciones RFID (`6x`) y de alarma (`9x`) **exigen el código** de la alarma.
 
 ### Memoria rápida de los códigos de función
 
 ```
-1x = GARAJE      11 abrir   · 10 cerrar
-2x = SONIDO      21 ON+vol  · 20 OFF
-3x = HORNO       31 ON+temp+min · 30 OFF
-4x = LUZ         41 nivel directo (0-10)
-5x = MERCADO     51 agregar · 50 quitar · 59 listar
-6x = RFID        61 enrol adulto · 62 enrol hijo · 60 borrar
-9x = ALARMA      91 armar   · 90 desarmar
+1x = GARAJE    11 abrir       · 10 cerrar
+2x = SONIDO    21 ON+vol      · 20 OFF · 22 vol+ · 23 vol-
+3x = HORNO     31 ON+temp+SEG · 30 OFF
+4x = LUZ       41 nivel directo (0-10)
+5x = MERCADO   51 agregar     · 50 quitar · 59 listar
+6x = RFID      61 enrol adulto · 62 enrol hijo · 63 recargar · 60 borrar
+9x = ALARMA    91 armar       · 90 desarmar
 ```
 
 ---
 
-## 4. Catálogo de productos del mercado
+## 4. Comandos por serial (USART, 9600 8N1)
 
-Como en el teclado no se pueden escribir nombres, cada producto tiene un **código de 2
-dígitos**:
+Se escriben como texto y se terminan con Enter. No distinguen mayúsculas/minúsculas.
+
+| Comando | Acción | Respuesta OK | Error |
+|---------|--------|--------------|-------|
+| `ARM:1234` | Armar alarma (requiere código) | `OK:ARMADA` | `ERROR:CODIGO` |
+| `DISARM:1234` | Desarmar alarma | `OK:DESACTIVADA` | `ERROR:CODIGO` |
+| `LUZ:0..10` | Fijar nivel del dimmer | `OK:LUZ,N` | — |
+| `GARAJE:ABRIR` / `GARAJE:CERRAR` | Mover el garaje | `OK:GARAJE_ABIERTO` / `..._CERRADO` | — |
+| `HORNO:‹temp›,‹seg›` | Encender horno (ej. `HORNO:180,5` = 5 s) | `OK:HORNO,temp,seg` | — |
+| `SONIDO:ON[,vol]` / `SONIDO:OFF` | Equipo de sonido | `OK:SONIDO_ON,vol` / `OK:SONIDO_OFF` | — |
+| `VOL:N` / `VOL:+` / `VOL:-` | Volumen (con sonido ON) | `OK:VOL,N` | `ERROR:SONIDO_APAGADO` |
+| `MERCADO:ADD,nombre,cant` | Agregar / **actualizar** producto | `OK:MERCADO_AGREGADO` o `OK:MERCADO_ACTUALIZADO` | `ERROR:MERCADO_LLENO` / `ERROR:FORMATO_MERCADO` |
+| `MERCADO:DEL,nombre` | Eliminar producto | `OK:MERCADO_ELIMINADO` | `ERROR:MERCADO_NO_ENCONTRADO` |
+| `MERCADO:LIST` | Listar productos | (lista) | `LISTA VACIA` |
+| `ENROL:ADULTO,‹cod›` | Enrolar próxima tarjeta como adulto | `OK:ENROLANDO_ADULTO` → `OK:ENROLADO_ADULTO` | `ERROR:CODIGO` / `ERROR:EEPROM_LLENA_O_DUPLICADO` |
+| `ENROL:HIJO,‹n›,‹cod›` | Enrolar hijo con N cupos | `OK:ENROLANDO_HIJO,N` → `OK:ENROLADO_HIJO,N` | idem |
+| `BORRAR,‹cod›` | Borrar la próxima tarjeta presentada | `OK:BORRANDO` → `OK:BORRADO` | `ERROR:CODIGO` / `ERROR:UID_NO_EXISTE` |
+| `ACCESOS:‹n›,‹cod›` | Recargar N cupos (presentar tarjeta del hijo) | `OK:RECARGANDO,N` → `OK:ACCESOS,N` | `ERROR:CODIGO` / `ERROR:UID_NO_ES_HIJO` |
+
+> **Importante:** enrolar, borrar y recargar funcionan en **dos pasos** — primero el
+> comando (teclado o serial), luego se **acerca la tarjeta** al lector RC522.
+
+Alertas que el sistema envía solo: `ALARMA:INCENDIO`, `ALARMA:ACCESO`, `ALARMA:INTRUSO`,
+`HORNO:FIN`, `ACCESO:CONCEDIDO_PUERTA` / `..._GARAJE` / `..._ADULTO` / `..._HIJO,N`,
+`ACCESO:DENEGADO`, `ACCESO:DENEGADO_SIN_CUPOS`.
+
+---
+
+## 5. Acceso por RFID y los 3 lugares (2 pulsadores)
+
+Hay **3 puntos de acceso**: **puerta principal**, **garaje** y **sala de juegos**. Para
+simular frente a cuál estás, se usan **2 pulsadores**:
+
+- **Pulsador izquierdo → D40**: retrocede en la lista.
+- **Pulsador derecho → D39**: avanza en la lista.
+- Lista circular: **PUERTA → GARAJE → SALA → PUERTA → …**
+- Al pulsar, el LCD muestra `LUGAR: PUERTA / GARAJE / SALA`.
+
+Al acercar una **tarjeta válida**, la acción depende del lugar:
+
+| Lugar | Acción al pasar la tarjeta |
+|-------|----------------------------|
+| **Puerta principal** | Concede acceso (abre el imán). Si la alarma está **armada**, arranca un **temporizador de 10 s** para desarmar con el código. |
+| **Garaje** | Concede acceso (mueve el servo). Si está **armada**, **15 s** para desarmar. |
+| **Sala de juegos** | **Adulto**: entra libre. **Niño**: descuenta 1 cupo (`SALA OK C:n`); si llega a 0 → `SALA SIN CUPOS`. |
+
+> **Retardo de desarme**: tras conceder acceso en puerta/garaje con la alarma armada, el
+> LCD muestra la cuenta regresiva `DESARMA EN: Ns`. Si **desarmas a tiempo** con el código,
+> todo bien. Si **se vence el tiempo**, se dispara la **alarma de intrusión** (`!! INTRUSO !!`,
+> LED rojo, `ALARMA:INTRUSO`).
+
+---
+
+## 6. Catálogo de productos del mercado (por teclado)
+
+Como en el teclado no se escriben nombres, cada producto tiene un **código de 2 dígitos**:
 
 | Código | Producto | Código | Producto |
 |:------:|----------|:------:|----------|
@@ -99,49 +148,41 @@ dígitos**:
 | `04` | arroz | `09` | pasta |
 | `05` | aceite | `10` | agua |
 
-Para ampliar el catálogo: editar `producto_por_codigo()` en `ProyectoDomotico.ino` y
-añadir la fila aquí.
+Para ampliar: editar `producto_por_codigo()` en `ProyectoDomotico.ino` y añadir la fila aquí.
 
-**Ejemplos de mercado:**
-- Agregar 3 panes: `*` `51` `02` `A` `3` `#` → `*5102A3#`
-- Quitar el café: `*` `50` `07` `#` → `*5007#`
-- Ver la lista en el LCD: `*` `59` `#` → `*59#` (muestra cada producto ~1,2 s)
+**Ejemplos:** agregar 3 panes → `*5102A3#` · quitar el café → `*5007#` · listar → `*59#`.
+Si un producto ya está en la lista y lo agregas con otra cantidad, **se reemplaza** la
+cantidad (no se duplica) y el LCD muestra `‹producto› ACTUALIZADO`.
 
 ---
 
-## 5. Respuestas y realimentación
+## 7. Realimentación en el LCD
 
-- En el **LCD** aparece el resultado de cada comando (p. ej. `SONIDO ON`, `HORNO: ON`,
-  `GARAJE ABIERTO`, `MERCADO +`, `CMD INVALIDO`).
-- Si hay terminal conectada (Proteus), además se envía la respuesta `OK:…` / `ERROR:…`
-  por serial.
-- Errores posibles: `CMD INVALIDO` (faltan dígitos del código de función), `CMD
-  DESCONOCIDO` (código no existe), `PROD DESCONOCIDO` (código de producto no catalogado),
-  `CODIGO INCORRECTO` (código de alarma errado).
+- **Línea 0**: estado de la alarma (`ALARMA: DESACTIV` / `ARMADA` / `!! INTRUSO !!` …) y,
+  de forma puntual, los mensajes de comandos (CMD, acceso RFID, lugar, garaje, etc.).
+- **Línea 1**: temperatura (`T:NNC`, izquierda) y nivel de luz (`L:N/10`, derecha).
+- Si el ruido del entrenador llega a corromper la pantalla, el firmware la **re-sincroniza
+  y repinta sola** a los pocos segundos cuando está en reposo.
 
-> **Anti-intrusos**: si se teclea mal el código de la alarma **3 veces seguidas** (al
-> armar o desarmar), el sistema lo interpreta como intento de intrusión y **dispara la
-> alarma**: LCD `!! INTRUSO !!`, LED rojo encendido y `ALARMA:INTRUSO` por serial. Un
-> código correcto reinicia el contador; para silenciarla, ingresa el código correcto
-> (desarmar). El número de intentos se ajusta en `ALARMA_MAX_INTENTOS` (`alarma.h`).
+**Anti-intrusos:** teclear mal el código **3 veces seguidas** dispara la alarma de intruso
+(`!! INTRUSO !!` + LED rojo + `ALARMA:INTRUSO`). Un código correcto reinicia el contador.
 
 ---
 
-## 6. Equivalencia teclado ↔ serial
+## 8. Equivalencia teclado ↔ serial
 
-| Función | Teclado | Serial (Proteus) |
-|---------|---------|------------------|
-| Armar alarma | `A` (tras código) o `*91‹cod›#` | `ARM:1234` |
-| Desarmar alarma | `B` (tras código) o `*90‹cod›#` | `DISARM:1234` |
-| Luz +/− | `C` / `D` | `LUZ:0-10` |
-| Luz nivel fijo | `*41‹n›#` | `LUZ:‹n›` |
-| Garaje abrir/cerrar | `*11#` / `*10#` | `GARAJE:ABRIR` / `GARAJE:CERRAR` |
-| Sonido ON/OFF | `*21#` / `*20#` | `SONIDO:ON` / `SONIDO:OFF` (volumen por pot A13) |
-| Horno ON/OFF | `*31‹t›A‹m›#` / `*30#` | `HORNO:‹t›,‹m›` |
-| Mercado +/−/lista | `*51‹c›A‹q›#` / `*50‹c›#` / `*59#` | `MERCADO:ADD,…` / `DEL,…` / `LIST` |
-| Enrol adulto | `*61‹cod›#` | `ENROL:ADULTO,‹cod›` |
-| Enrol hijo | `*62‹n›A‹cod›#` | `ENROL:HIJO,‹n›,‹cod›` |
-| Borrar tarjeta | `*60‹cod›#` | `BORRAR,‹cod›` |
+| Función | Teclado | Serial |
+|---------|---------|--------|
+| Armar / desarmar | `A` / `B` (tras código) o `*91‹c›#` / `*90‹c›#` | `ARM:1234` / `DISARM:1234` |
+| Luz +/− · nivel fijo | `C` / `D` · `*41‹n›#` | `LUZ:‹n›` |
+| Garaje abrir / cerrar | `*11#` / `*10#` | `GARAJE:ABRIR` / `GARAJE:CERRAR` |
+| Sonido ON / OFF · vol | `*21‹v›#` / `*20#` · `*22#`/`*23#` | `SONIDO:ON[,v]` / `SONIDO:OFF` · `VOL:…` |
+| Horno ON (temp, **seg**) / OFF | `*31‹t›A‹s›#` / `*30#` | `HORNO:‹t›,‹s›` |
+| Mercado +/− / lista | `*51‹c›A‹q›#` / `*50‹c›#` / `*59#` | `MERCADO:ADD,…` / `DEL,…` / `LIST` |
+| Enrol adulto / hijo | `*61‹c›#` / `*62‹n›A‹c›#` | `ENROL:ADULTO,‹c›` / `ENROL:HIJO,‹n›,‹c›` |
+| Recargar cupos hijo | `*63‹n›A‹c›#` | `ACCESOS:‹n›,‹c›` |
+| Borrar tarjeta | `*60‹c›#` | `BORRAR,‹c›` |
+| Cambiar de lugar | pulsadores D40 / D39 | — (solo físico) |
 
 ---
 

@@ -69,7 +69,7 @@ static uint8_t pos_codigo = 0;
 static uint32_t ultima_lectura_temp = 0;
 
 // Cada cuantos MILISEGUNDOS se relee el sensor y se actualizan calefactor/ventilador.
-#define INTERVALO_TEMP  500   // 500 ms -> respuesta rapida del LCD y los actuadores
+#define INTERVALO_TEMP  1000  // 1 s -> sigue siendo responsivo y escribe menos al LCD
 
 // Marca de tiempo (ms) de la ultima interaccion activa del usuario.
 // "Interaccion" = pulsacion de cualquier tecla, comando LUZ:, o evento RFID.
@@ -123,6 +123,32 @@ static uint16_t marquee_tick   = 0;  // vueltas del loop desde el ultimo paso
 #define MARQUEE_VELOCIDAD  300
 
 
+// ─── SELECTOR DE LUGAR (2 pulsadores) + RETARDO DE DESARME ───────────────────
+// Los 2 pulsadores alternan entre los 3 lugares de acceso (lista circular):
+//   PUERTA (0) -> GARAJE (1) -> SALA (2) -> PUERTA (0) ...
+//   Izquierdo -> D40 (PG1): retrocede   |   Derecho -> D39 (PG2): avanza
+// El RFID lee el lugar con obtener_lugar() y actua segun corresponda.
+static uint8_t  lugar_actual  = LUGAR_PUERTA;  // arranca en puerta principal
+static uint8_t  btn_izq_prev  = 0;             // estado anterior (0=suelto; activo en ALTO)
+static uint8_t  btn_der_prev  = 0;
+static uint32_t btn_ultimo_ms = 0;             // antirrebote de los pulsadores
+#define BTN_DEBOUNCE_MS  200
+
+// Retardo de desarme: tras conceder acceso en puerta/garaje, si la alarma esta
+// ARMADA, hay N segundos para desarmar con el codigo; si no, se dispara intruso.
+static uint8_t  retardo_activo   = 0;
+static uint32_t retardo_inicio   = 0;
+static uint32_t retardo_total_ms = 0;
+static uint8_t  retardo_ult_seg  = 0;   // ultimo segundo mostrado (evita repintar)
+
+// Auto-recuperacion del LCD: cada cuanto (ms) re-sincronizar + repintar la
+// pantalla estandar EN REPOSO. Si el ruido del entrenador corrompe el LCD, se
+// recupera solo en ~2 s. Subelo si quieres menos escrituras; baja-lo si quieres
+// que se recupere mas rapido.
+static uint32_t ultima_resync_lcd = 0;
+#define RESYNC_LCD_MS  2000
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // a_mayusculas(s)
 // Convierte la cadena 's' a mayusculas en el lugar (modifica el original).
@@ -140,6 +166,46 @@ static uint16_t marquee_tick   = 0;  // vueltas del loop desde el ultimo paso
 // ─────────────────────────────────────────────────────────────────────────────
 void rfid_notifica_lcd() {
     ultima_interaccion = millis_sistema();
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// obtener_lugar()
+// Devuelve el lugar de acceso seleccionado con los 2 pulsadores. La usa rfid.cpp
+// (por 'extern') para decidir que hacer cuando se presenta una tarjeta valida.
+// ─────────────────────────────────────────────────────────────────────────────
+uint8_t obtener_lugar() {
+    return lugar_actual;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// acceso_iniciar_retardo(segundos)
+// La llama rfid.cpp tras conceder acceso en puerta/garaje. SOLO arranca el
+// retardo si la alarma de acceso esta ARMADA (si esta desarmada, no hay nada
+// que desarmar: el acceso ya quedo concedido). El loop vigila el vencimiento.
+// ─────────────────────────────────────────────────────────────────────────────
+void acceso_iniciar_retardo(uint8_t segundos) {
+    if (alarma_estado() == ALARMA_ARMADA) {
+        retardo_activo   = 1;
+        retardo_inicio   = millis_sistema();
+        retardo_total_ms = (uint32_t)segundos * 1000;
+        retardo_ult_seg  = 0xFF;   // forzar el primer repintado del contador
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// mostrar_lugar()
+// Escribe en la linea 0 el lugar seleccionado (al pulsar un boton) y lo reporta
+// por serial. Linea 0 = no choca con la temperatura (linea 1).
+// ─────────────────────────────────────────────────────────────────────────────
+static void mostrar_lugar() {
+    lcd_goto(0, 0);
+    if      (lugar_actual == LUGAR_PUERTA) lcd_string("LUGAR: PUERTA   ");
+    else if (lugar_actual == LUGAR_GARAJE) lcd_string("LUGAR: GARAJE   ");
+    else                                   lcd_string("LUGAR: SALA     ");
+    usart_enviar_string("LUGAR:");
+    usart_enviar_int(lugar_actual);
+    usart_enviar_newline();
 }
 
 
@@ -1072,6 +1138,22 @@ static void ejecutar_comando_teclado(char* cmd) {
             usart_enviar_newline();
             break;
 
+        case 63: { // recargar cupos de un hijo: *63<cantidad>A<codigo># y luego pasar la tarjeta
+            // args = "<cantidad>A<codigo>", p1 = cantidad; codigo tras la 'A'
+            char* sep63 = strchr(args, 'A');
+            char* codigo63 = (sep63 != NULL) ? sep63 + 1 : args;
+            if (alarma_verificar_codigo(codigo63)) {
+                rfid_entrar_modo_recarga(p1);
+                lcd_goto(0, 0); lcd_string("RECARGAR HIJO   ");
+                usart_enviar_string("OK:RECARGANDO,");
+                usart_enviar_int(p1);
+            } else {
+                reportar_codigo_incorrecto();
+            }
+            usart_enviar_newline();
+            break;
+        }
+
         // ── 9x ALARMA (armar/desarmar con codigo) ────────────────────────────
         case 91: // armar (args = codigo de 4 digitos, ej. *91 1234 #)
             if (alarma_verificar_codigo(args)) {
@@ -1135,6 +1217,11 @@ void setup() {
     eeprom_init();      // gestor de UIDs en EEPROM (0x000-0x09F)
     rfid_init();        // modulo RC522 por SPI
     acceso_init();      // iman puerta principal (PG0) + garaje (servo)
+
+    // Pulsadores selectores de lugar: D40 (PG1) y D39 (PG2) como ENTRADAS,
+    // activo en ALTO (el entrenador los maneja por debajo). No tocan PG0 (iman).
+    DDRG  &= ~((1 << PG1) | (1 << PG2));   // entradas
+    PORTG &= ~((1 << PG1) | (1 << PG2));   // sin pull-up interno
 
     // sei(): habilita las interrupciones globales poniendo el bit I del SREG en 1.
     // DEBE ir DESPUES de todos los init() porque:
@@ -1216,6 +1303,55 @@ void loop() {
     // ── 1b. RFID (Fase 4) ─────────────────────────────────────────────────────
     rfid_verificar();
 
+    // ── 1c. PULSADORES SELECTORES DE LUGAR ───────────────────────────────────
+    // D40 (PG1) = izquierda (retrocede), D39 (PG2) = derecha (avanza).
+    // PULL-UP: en reposo se lee 1; al pulsar (a GND) se lee 0. Antirrebote real.
+    {
+        uint8_t izq = (PING & (1 << PG1)) ? 1 : 0;  // 1 = presionado (activo en alto)
+        uint8_t der = (PING & (1 << PG2)) ? 1 : 0;
+
+        if (millis_sistema() - btn_ultimo_ms >= BTN_DEBOUNCE_MS) {
+            if (btn_izq_prev == 0 && izq == 1) {            // flanco de pulsacion izquierda
+                lugar_actual = (lugar_actual + LUGAR_TOTAL - 1) % LUGAR_TOTAL;
+                mostrar_lugar();
+                btn_ultimo_ms = millis_sistema();
+            } else if (btn_der_prev == 0 && der == 1) {     // flanco de pulsacion derecha
+                lugar_actual = (lugar_actual + 1) % LUGAR_TOTAL;
+                mostrar_lugar();
+                btn_ultimo_ms = millis_sistema();
+            }
+        }
+        btn_izq_prev = izq;
+        btn_der_prev = der;
+    }
+
+    // ── 1d. RETARDO DE DESARME (entrada por puerta/garaje) ────────────────────
+    // Tras conceder acceso por RFID en puerta/garaje (con alarma armada), hay
+    // 10s/15s para desarmar con el codigo. Si se desarma, alarma_estado() deja
+    // de ser ARMADA y el retardo se cancela solo. Si vence, se dispara intruso.
+    if (retardo_activo) {
+        if (alarma_estado() != ALARMA_ARMADA) {
+            retardo_activo = 0;   // se desarmo (o ya se disparo): cancelar
+        } else {
+            uint32_t transcurrido = millis_sistema() - retardo_inicio;
+            if (transcurrido >= retardo_total_ms) {
+                // Vencio el tiempo sin desarmar -> intrusion
+                retardo_activo = 0;
+                alarma_disparar_intruso();
+                lcd_goto(0, 0); lcd_string("!! INTRUSO !!   ");
+                usart_enviar_string("ALARMA:INTRUSO"); usart_enviar_newline();
+            } else {
+                // Cuenta regresiva en la linea 0 (solo al cambiar de segundo)
+                uint8_t seg = (uint8_t)((retardo_total_ms - transcurrido + 999) / 1000);
+                if (seg != retardo_ult_seg) {
+                    retardo_ult_seg = seg;
+                    lcd_goto(0, 0); lcd_string("DESARMA EN: ");
+                    lcd_int(seg); lcd_string("s ");
+                }
+            }
+        }
+    }
+
     // ── 2. TECLADO (Fase 2 + logica de alarma/dimmer) ────────────────────────
     // teclado_hay(): retorna 1 si la ISR del Timer2 deposito una tecla nueva.
     //   Se verifica ANTES de leer para no llamar teclado_leer() sin tecla disponible
@@ -1295,6 +1431,29 @@ void loop() {
         lcd_string("HORNO: LISTO    ");
         usart_enviar_string("HORNO:FIN");
         usart_enviar_newline();
+    }
+
+    // ── 5. AUTO-RECUPERACION DEL LCD (anti-corrupcion por ruido) ─────────────
+    // Si el ruido del entrenador (servo/RF/cables) desincroniza el LCD y queda
+    // mostrando basura, esto lo re-sincroniza y repinta la pantalla estandar.
+    // Solo corre EN REPOSO (sin interaccion reciente ni retardo de desarme), asi
+    // no estorba a los mensajes de RFID/teclado/garaje.
+    if (!retardo_activo &&
+        (millis_sistema() - ultima_interaccion) >= TIEMPO_MOSTRAR_INTERACCION &&
+        (millis_sistema() - ultima_resync_lcd)  >= RESYNC_LCD_MS) {
+
+        ultima_resync_lcd = millis_sistema();
+
+        lcd_resync();   // realinear el controlador (sin borrar -> sin parpadeo)
+
+        // Repintar la pantalla estandar: linea 0 = alarma, linea 1 = temp + luz
+        lcd_goto(0, 0);
+        if      (alarma_estado() == ALARMA_ARMADA)    lcd_string("ALARMA: ARMADA  ");
+        else if (alarma_estado() == ALARMA_DISPARADA) lcd_string("!! ALARMA !!    ");
+        else                                          lcd_string("ALARMA: DESACTIV");
+
+        lcd_goto(1, 0); lcd_string("T:"); lcd_int(temp_celsius()); lcd_string("C   ");
+        lcd_goto(1, 9); lcd_string("L:"); lcd_int(dimmer_get());   lcd_string("/10");
     }
 }
 
