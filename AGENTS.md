@@ -2,7 +2,7 @@
 
 > Sistema domótico sobre **ATmega2560 (Arduino Mega 2560)**, en **registros directos del
 > AVR, SIN librerías de Arduino**. Proyecto de Microprocesadores 2026-1.
-> Autores: **Dylber Cabrera** y **Juan David Ocampo**.
+> Autores: **Dylber Cabrera**, **Juan David Ocampo**, **Alejandro Martínez**.
 >
 > **Este es el punto de entrada para cualquier agente (Claude, Copilot, etc.).** Léelo
 > COMPLETO antes de tocar código. El proyecto YA FUE SUSTENTADO con éxito y FUNCIONA en el
@@ -231,4 +231,4 @@ incendio + anti-intrusos), motor/garaje (servo), temperatura (histéresis), dimm
 (3 lugares con 2 pulsadores, contador de la sala, retardo de desarme), y reloj de tiempo
 real + auto-recuperación del LCD. Historial de defectos en `specs/defects/`.
 
-*Sistema Domótico — Microprocesadores 2026-1 · ATmega2560 · Dylber Cabrera & Juan David Ocampo*
+*Sistema Domótico — Microprocesadores 2026-1 · ATmega2560 · Dylber Cabrera, Juan David Ocampo, Alejandro Martínez*
