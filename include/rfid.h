@@ -33,12 +33,17 @@
 #define TARJETA_BLOQUE_CONTADOR  4  // bloque 4 (sector 1, bloque 0)
 #define LLAVE_DEFECTO {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF}
 
+// UID fijo del hijo de pruebas (Fase 0: simulacion sin RFID fisico)
+#define UID_SIMULADO  {0x00, 0x00, 0x00, 0x01}
+
 void rfid_init();
 uint8_t rfid_hay_tarjeta();              // 1 si hay tarjeta cerca
 uint8_t rfid_leer_uid(uint8_t* uid);     // llena uid[4], retorna 1 si OK
-uint8_t rfid_leer_contador(uint8_t* uid, uint8_t* valor);
-uint8_t rfid_escribir_contador(uint8_t* uid, uint8_t valor);
 void rfid_verificar();                   // llamada desde loop()
+
+// Simulacion de tarjeta hijo (Fase 0): reutiliza manejar_tarjeta_ok()
+// con un UID fijo de pruebas, sin pasar por SPI/REQA/anticolision.
+void rfid_simular_hijo();
 
 // Modos de operacion pendiente (para enrolar/borrar por serial o teclado)
 void rfid_entrar_modo_enrol(uint8_t tipo, uint8_t cupos);

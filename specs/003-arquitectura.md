@@ -52,6 +52,7 @@ capturan en ISRs cortas que dejan banderas/datos que el `loop()` consume.
 | D51 | PB2 | OUT | MOSI SPI | spi_master |
 | D50 | PB3 | IN | MISO SPI | spi_master |
 | D53 | PB0 | OUT | CS / SS SPI (RC522) | spi_master |
+| D7 | PH4 | IN pull-up | Botón simulación RFID (hijo de pruebas) | .ino (Fase 0) |
 
 > ✅ **DEF-001 corregido**: `horno.cpp` usa PH5 mediante las macros `HORNO_DDR`/
 > `HORNO_PORT` de `horno.h` (antes escribía PE5, que es el sensor de incendio SW4/INT5).
@@ -60,6 +61,9 @@ capturan en ISRs cortas que dejan banderas/datos que el `loop()` consume.
 > en `acceso.cpp`.
 > 🆕 **ADC compartido** (`adc.cpp`): temperatura en ADC9 (A9) y volumen en ADC13 (A13/PK5),
 > con conmutación de mux y conversión de descarte por lectura.
+> 🆕 **Boton simulacion RFID** (Fase 0): **D7/PH4** como entrada con pull-up, activo bajo.
+> Simula el UID `{0x00,0x00,0x00,0x01}` del hijo de pruebas. Pin libre (PH4 no lo usa
+> ningún otro módulo: servo en PH3, horno en PH5, sonido LED en PH6).
 
 ### SPI y Fase 4 (RFID RC522)
 
@@ -87,12 +91,14 @@ PB0 se usa como CS del RC522. No se necesita RST por separado (se hace soft-rese
 
 | Rango | Contenido | Definido en |
 |-------|-----------|-------------|
-| `0x000–0x09F` | Hasta 10 UIDs autorizados (4 bytes UID + 1 byte tipo) | `eeprom_mgr.h` (Fase 4) |
+| `0x000–0x031` | Hasta 10 UIDs autorizados (4 bytes UID + 1 byte tipo) | `eeprom_mgr.h` (Fase 4) |
+| `0x032–0x04F` | Tiempo de hijos (10 × 3 bytes: int16_t tiempo_restante + uint8_t estado) | `eeprom_mgr.h` (Modificación) |
 | `0x0A0–0x0A3` | Código de alarma (4 dígitos) | `eeprom_mgr.h` (Fase 4) |
 | `0x0B0–0x1FF` | Lista de mercado (10 items × 14 bytes) | `mercado.h` (activo) |
 
-> El módulo `mercado` ya usa `0x0B0+`. Fase 4 debe respetar las zonas de UIDs/código sin
-> solaparse con mercado.
+> El tiempo de cada hijo se almacena como `int16_t` (soporta valores negativos para
+> sobregiro). El estado es `0=fuera`, `1=dentro`. El mercado sigue en `0x0B0+`.
+> La EEPROM se escribe solo al salir de la sala (no cada segundo) para evitar desgaste.
 
 ## Protocolo serial (9600 8N1)
 
@@ -110,14 +116,16 @@ Entrada normalizada a mayúsculas. Comando terminado en `\n`.
 | `MERCADO:DEL,nom` | Eliminar | `OK:MERCADO_ELIMINADO` | `ERROR:MERCADO_NO_ENCONTRADO` |
 | `MERCADO:LIST` | Listar | (lista) | `LISTA VACIA` |
 | `ENROL:ADULTO,<cod>` | Enrolar próxima tarjeta como adulto | `OK:ENROLANDO_ADULTO` → `OK:ENROLADO_ADULTO` | `ERROR:CODIGO` / `ERROR:EEPROM_LLENA_O_DUPLICADO` |
-| `ENROL:HIJO,<n>,<cod>` | Enrolar hijo con N cupos | `OK:ENROLANDO_HIJO,N` → `OK:ENROLADO_HIJO,N` | idem |
+| `ENROL:HIJO,<seg>,<cod>` | Enrolar hijo con N segundos de tiempo (en EEPROM) | `OK:ENROLANDO_HIJO,N` → `OK:ENROLADO_HIJO,N` | idem |
 | `BORRAR,<cod>` | Borrar próxima tarjeta presentada | `OK:BORRANDO` → `OK:BORRADO` | `ERROR:CODIGO` / `ERROR:UID_NO_EXISTE` |
-| `ACCESOS:<n>,<cod>` | Recargar N accesos (presentar tarjeta hijo) | `OK:RECARGANDO,N` → `OK:ACCESOS,N` | `ERROR:CODIGO` / `ERROR:UID_NO_EXISTE` / `ERROR:UID_NO_ES_HIJO` |
+| `ACCESOS:<seg>,<cod>` | Sumar N segundos al tiempo restante del hijo (en EEPROM) | `OK:RECARGANDO,N` → `OK:ACCESOS,N` | `ERROR:CODIGO` / `ERROR:UID_NO_EXISTE` / `ERROR:UID_NO_ES_HIJO` |
 | (otro) | — | — | `ERROR:COMANDO_DESCONOCIDO` |
 
 Alertas asíncronas: `ALARMA:INCENDIO`, `ALARMA:ACCESO`, `ALARMA:INTRUSO` (3 códigos
 equivocados seguidos), `HORNO:FIN`, `ACCESO:CONCEDIDO_ADULTO`, `ACCESO:CONCEDIDO_HIJO,N`,
 `ACCESO:DENEGADO`, `ACCESO:DENEGADO_SIN_CUPOS`.
+Alertas del tiempo de sala: `HIJO:TIME_UP,<indice>`, `ACCESO:HIJO_ENTRA,<indice>,<t>`,
+`ACCESO:HIJO_SALE,<indice>,<t>` (t negativo = sobregiro).
 
 ### Comandos por teclado (entrenador sin terminal)
 

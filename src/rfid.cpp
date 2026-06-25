@@ -20,9 +20,15 @@ extern void rfid_notifica_lcd();
 // arranque del retardo de desarme tras conceder acceso (definidos en el .ino).
 extern uint8_t obtener_lugar();
 extern void acceso_iniciar_retardo(uint8_t segundos);
+// Toggle entrada/salida de la sala para hijos (definidas en el .ino).
+extern void hijo_entrar_sala(uint8_t indice);
+extern void hijo_salir_sala(uint8_t indice);
 
 // Llave por defecto para autenticacion MIFARE (todo 0xFF)
 static const uint8_t LLAVE_MIFARE[6] = LLAVE_DEFECTO;
+
+// UID del hijo de pruebas para simulacion sin RFID fisico (Fase 0)
+static const uint8_t uid_simulado[4] = UID_SIMULADO;
 
 // Estado interno de la maquina de estados no bloqueante
 #define RFID_ESTADO_OCIOSO      0
@@ -408,63 +414,7 @@ static void rc522_calcular_crc(const uint8_t* datos, uint8_t len, uint8_t* crc) 
     crc[1] = rc522_leer_reg(0x21);                     // CRCResultRegH
 }
 
-// -- rfid_leer_contador() --------------------------------------------------
-uint8_t rfid_leer_contador(uint8_t* uid, uint8_t* valor) {
-    uint8_t bloque[16];
 
-    // Hasta 3 intentos: la comunicacion del RC522 clon falla a veces de forma
-    // intermitente (era el ERROR:LEER_CONTADOR). Se limpia el Crypto1On antes de
-    // cada intento para forzar una autenticacion fresca.
-    for (uint8_t intento = 0; intento < 3; intento++) {
-
-        rc522_escribir_reg(RC522_REG_STATUS2, 0x00);   // autenticacion fresca
-        if (!rc522_autenticar(TARJETA_BLOQUE_CONTADOR, uid)) continue;
-
-        // Comando READ: [0x30, bloque, CRC_L, CRC_H]. MIFARE EXIGE el CRC.
-        uint8_t tx[4] = {PICC_CMD_READ, TARJETA_BLOQUE_CONTADOR, 0, 0};
-        rc522_calcular_crc(tx, 2, &tx[2]);
-        uint8_t rx_len = sizeof(bloque);
-
-        if (rc522_transceive(tx, 4, bloque, &rx_len) && rx_len >= 16) {
-            *valor = bloque[0];   // el contador esta en el primer byte
-            return 1;
-        }
-    }
-    return 0;   // fallo tras 3 intentos
-}
-
-// -- rfid_escribir_contador() ----------------------------------------------
-uint8_t rfid_escribir_contador(uint8_t* uid, uint8_t valor) {
-    uint8_t bloque[16];
-
-    // Autenticar
-    if (!rc522_autenticar(TARJETA_BLOQUE_CONTADOR, uid)) return 0;
-
-    // Primero leer el bloque actual para preservar los demas bytes.
-    // READ tambien requiere CRC: [0x30, bloque, CRC_L, CRC_H].
-    uint8_t tx_read[4] = {PICC_CMD_READ, TARJETA_BLOQUE_CONTADOR, 0, 0};
-    rc522_calcular_crc(tx_read, 2, &tx_read[2]);
-    uint8_t rx_len = sizeof(bloque);
-    if (!rc522_transceive(tx_read, 4, bloque, &rx_len)) return 0;
-    if (rx_len < 16) return 0;
-
-    // Modificar solo el primer byte (contador)
-    bloque[0] = valor;
-
-    // WRITE MIFARE = dos pasos con ACK de 4 bits, AMBOS con CRC.
-    // Paso 1: [0xA0, bloque, CRC_L, CRC_H] -> la tarjeta responde ACK (0x0A).
-    uint8_t tx_cmd[4] = {PICC_CMD_WRITE, TARJETA_BLOQUE_CONTADOR, 0, 0};
-    rc522_calcular_crc(tx_cmd, 2, &tx_cmd[2]);
-    if (!rc522_mifare_cmd(tx_cmd, 4)) return 0;
-
-    // Paso 2: [16 bytes de datos, CRC_L, CRC_H] -> ACK final.
-    uint8_t tx_data[18];
-    for (uint8_t i = 0; i < 16; i++) tx_data[i] = bloque[i];
-    rc522_calcular_crc(tx_data, 16, &tx_data[16]);
-    if (!rc522_mifare_cmd(tx_data, 18)) return 0;
-
-    return 1;
-}
 
 // ==========================================================================
 // OPERACIONES PENDIENTES (enrolar/borrar/recarga)
@@ -526,14 +476,14 @@ static void manejar_tarjeta_ok() {
                     usart_enviar_newline();
                     lcd_goto(0, 0); lcd_string("ENROLADO ADULTO ");
                 } else {
+                    // Guardar tiempo inicial en EEPROM, no en la tarjeta
+                    eeprom_escribir_tiempo(res, (int16_t)op_cupos);
+                    eeprom_escribir_estado(res, HIJO_FUERA);
                     usart_enviar_string("OK:ENROLADO_HIJO,");
                     usart_enviar_int(op_cupos);
                     usart_enviar_newline();
                     lcd_goto(0, 0); lcd_string("                ");
-                    lcd_goto(0, 0); lcd_string("ENROL HIJO C:"); lcd_int(op_cupos);
-
-                    // Escribir cupos iniciales en la tarjeta
-                    rfid_escribir_contador(uid_actual, op_cupos);
+                    lcd_goto(0, 0); lcd_string("ENROL HIJO T:"); lcd_int(op_cupos); lcd_string("s");
                 }
             } else {
                 usart_enviar_string("ERROR:EEPROM_LLENA_O_DUPLICADO");
@@ -557,25 +507,14 @@ static void manejar_tarjeta_ok() {
                 uint16_t dir = EEPROM_BASE_UIDS + (idx * 5);
                 uint8_t tipo = eeprom_leer(dir + 4);
 
-                if (tipo == 1) {  // solo hijos tienen contador recargable
-                    uint8_t contador = 0;
-                    if (rfid_leer_contador(uid_actual, &contador)) {
-                        uint8_t nuevo = contador + op_cupos;
-                        if (nuevo < contador) nuevo = 255;  // saturar si desborda
-                        if (rfid_escribir_contador(uid_actual, nuevo)) {
-                            usart_enviar_string("OK:ACCESOS,");
-                            usart_enviar_int(nuevo);
-                            usart_enviar_newline();
-                            lcd_goto(0, 0); lcd_string("                ");
-                            lcd_goto(0, 0); lcd_string("RECARGA C:"); lcd_int(nuevo);
-                        } else {
-                            usart_enviar_string("ERROR:ESCRIBIR_CONTADOR");
-                            usart_enviar_newline();
-                        }
-                    } else {
-                        usart_enviar_string("ERROR:LEER_CONTADOR");
-                        usart_enviar_newline();
-                    }
+                if (tipo == 1) {  // solo hijos tienen tiempo recargable
+                    eeprom_escribir_tiempo(idx, (int16_t)op_cupos);
+
+                    usart_enviar_string("OK:ACCESOS,");
+                    usart_enviar_int(op_cupos);
+                    usart_enviar_newline();
+                    lcd_goto(0, 0); lcd_string("                ");
+                    lcd_goto(0, 0); lcd_string("RECARGA T:"); lcd_int(op_cupos); lcd_string("s");
                 } else {
                     usart_enviar_string("ERROR:UID_NO_ES_HIJO");
                     usart_enviar_newline();
@@ -618,44 +557,33 @@ static void manejar_tarjeta_ok() {
         // con los 2 pulsadores, NO del tipo de tarjeta:
         //   PUERTA  -> conceder + 10s para desarmar con codigo
         //   GARAJE  -> conceder + 15s para desarmar con codigo
-        //   SALA    -> contador de cupos del nino (descuenta 1 por ingreso)
+        //   SALA    -> toggle entrada/salida con tiempo en EEPROM
         uint8_t lugar = obtener_lugar();
 
         if (lugar == LUGAR_SALA) {
-            // ── SALA DE JUEGOS: el ADULTO entra libre; el HIJO descuenta 1 cupo
+            // ── SALA DE JUEGOS: el ADULTO entra libre; el HIJO togglea (entra/sale)
             uint16_t dir_s = EEPROM_BASE_UIDS + (indice * 5);
             uint8_t  tipo_s = eeprom_leer(dir_s + 4);   // 0=adulto, 1=hijo
 
             if (tipo_s == 0) {
-                // Adulto: acceso libre a la sala, sin tocar el contador
+                // Adulto: acceso libre a la sala, sin tocar contador ni tiempo
                 usart_enviar_string("ACCESO:CONCEDIDO_ADULTO"); usart_enviar_newline();
                 lcd_goto(0, 0); lcd_string("SALA: ADULTO    ");
 
             } else {
-                // Hijo: logica del contador de cupos
-                uint8_t contador = 0;
-                if (rfid_leer_contador(uid_actual, &contador)) {
-                    if (contador > 0) {
-                        contador--;
-                        if (rfid_escribir_contador(uid_actual, contador)) {
-                            acceso_concedido_hijo();
-                            usart_enviar_string("ACCESO:CONCEDIDO_HIJO,");
-                            usart_enviar_int(contador); usart_enviar_newline();
-                            lcd_goto(0, 0); lcd_string("                ");
-                            lcd_goto(0, 0); lcd_string("SALA OK C:"); lcd_int(contador);
-                        } else {
-                            acceso_denegado();
-                            usart_enviar_string("ERROR:ESCRIBIR_CONTADOR"); usart_enviar_newline();
-                        }
+                // Hijo: toggle entrada/salida segun el estado EEPROM
+                uint8_t estado = eeprom_leer_estado(indice);
+                if (estado == HIJO_FUERA) {
+                    // No permitir entrar si el tiempo es <= 0
+                    int16_t t_restante = eeprom_leer_tiempo(indice);
+                    if (t_restante <= 0) {
+                        usart_enviar_string("ACCESO:DENEGADO_SIN_TIEMPO"); usart_enviar_newline();
+                        lcd_goto(0, 0); lcd_string("SALA: SIN TIEMPO");
                     } else {
-                        acceso_denegado();
-                        usart_enviar_string("ACCESO:DENEGADO_SIN_CUPOS"); usart_enviar_newline();
-                        lcd_goto(0, 0); lcd_string("SALA SIN CUPOS  ");
+                        hijo_entrar_sala(indice);
                     }
                 } else {
-                    acceso_denegado();
-                    usart_enviar_string("ERROR:LEER_CONTADOR"); usart_enviar_newline();
-                    lcd_goto(0, 0); lcd_string("ERROR LECTURA   ");
+                    hijo_salir_sala(indice);
                 }
             }
 
@@ -725,4 +653,21 @@ void rfid_verificar() {
             estado_rfid = RFID_ESTADO_OCIOSO;
             break;
     }
+}
+
+// -- rfid_simular_hijo() ----------------------------------------------------
+// Simula la presentacion de la tarjeta del hijo de pruebas (UID fijo) sin
+// pasar por SPI/REQA/anticolision. Reutiliza manejar_tarjeta_ok() para que
+// el flujo de decision (buscar en EEPROM, enrolar/borrar/recargar segun
+// op_pendiente, o toggle de acceso segun lugar) sea IDENTICO al real.
+void rfid_simular_hijo() {
+    uid_actual[0] = uid_simulado[0];
+    uid_actual[1] = uid_simulado[1];
+    uid_actual[2] = uid_simulado[2];
+    uid_actual[3] = uid_simulado[3];
+
+    // El UID simulado se procesa con la misma logica que una tarjeta real:
+    // si hay operacion pendiente (enrol/borrar/recarga) se atiende primero;
+    // si no, se evalua el acceso segun el lugar seleccionado.
+    manejar_tarjeta_ok();
 }

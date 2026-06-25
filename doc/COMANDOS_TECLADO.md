@@ -59,8 +59,8 @@ equivocas, pulsa `*` para cancelar.
 | **Mercado: eliminar** | `*50‹cod›#` | `*5001#` → quita leche | cod = producto (§6) |
 | **Mercado: listar** | `*59#` | `*59#` | lista por serial; conteo en LCD |
 | **Enrolar adulto** | `*61‹código›#` | `*611234#` | luego pasar la tarjeta |
-| **Enrolar hijo** | `*62‹cupos›A‹código›#` | `*625A1234#` → 5 cupos | luego pasar la tarjeta del niño |
-| **Recargar cupos hijo** | `*63‹cantidad›A‹código›#` | `*635A1234#` → +5 | luego pasar la tarjeta del niño |
+| **Enrolar hijo** (tiempo) | `*62‹segundos›A‹código›#` | `*62300A1234#` → 300 s | el tiempo se guarda en **EEPROM**, ya no en la tarjeta |
+| **Recargar tiempo hijo** | `*63‹segundos›A‹código›#` | `*6360A1234#` → +60 s | suma segundos al tiempo restante del hijo |
 | **Borrar tarjeta** | `*60‹código›#` | `*601234#` | luego pasar la tarjeta a borrar |
 | **Alarma armar** | `*91‹código›#` | `*911234#` | equivale a la tecla `A` |
 | **Alarma desarmar** | `*90‹código›#` | `*901234#` | equivale a la tecla `B` |
@@ -98,9 +98,9 @@ Se escriben como texto y se terminan con Enter. No distinguen mayúsculas/minús
 | `MERCADO:DEL,nombre` | Eliminar producto | `OK:MERCADO_ELIMINADO` | `ERROR:MERCADO_NO_ENCONTRADO` |
 | `MERCADO:LIST` | Listar productos | (lista) | `LISTA VACIA` |
 | `ENROL:ADULTO,‹cod›` | Enrolar próxima tarjeta como adulto | `OK:ENROLANDO_ADULTO` → `OK:ENROLADO_ADULTO` | `ERROR:CODIGO` / `ERROR:EEPROM_LLENA_O_DUPLICADO` |
-| `ENROL:HIJO,‹n›,‹cod›` | Enrolar hijo con N cupos | `OK:ENROLANDO_HIJO,N` → `OK:ENROLADO_HIJO,N` | idem |
+| `ENROL:HIJO,‹seg›,‹cod›` | Enrolar hijo con N segundos de tiempo (en EEPROM) | `OK:ENROLANDO_HIJO,N` → `OK:ENROLADO_HIJO,N` | idem |
 | `BORRAR,‹cod›` | Borrar la próxima tarjeta presentada | `OK:BORRANDO` → `OK:BORRADO` | `ERROR:CODIGO` / `ERROR:UID_NO_EXISTE` |
-| `ACCESOS:‹n›,‹cod›` | Recargar N cupos (presentar tarjeta del hijo) | `OK:RECARGANDO,N` → `OK:ACCESOS,N` | `ERROR:CODIGO` / `ERROR:UID_NO_ES_HIJO` |
+| `ACCESOS:‹seg›,‹cod›` | Sumar N segundos al tiempo restante del hijo (en EEPROM) | `OK:RECARGANDO,N` → `OK:ACCESOS,N` | `ERROR:CODIGO` / `ERROR:UID_NO_ES_HIJO` |
 
 > **Importante:** enrolar, borrar y recargar funcionan en **dos pasos** — primero el
 > comando (teclado o serial), luego se **acerca la tarjeta** al lector RC522.
@@ -108,6 +108,8 @@ Se escriben como texto y se terminan con Enter. No distinguen mayúsculas/minús
 Alertas que el sistema envía solo: `ALARMA:INCENDIO`, `ALARMA:ACCESO`, `ALARMA:INTRUSO`,
 `HORNO:FIN`, `ACCESO:CONCEDIDO_PUERTA` / `..._GARAJE` / `..._ADULTO` / `..._HIJO,N`,
 `ACCESO:DENEGADO`, `ACCESO:DENEGADO_SIN_CUPOS`.
+Alertas del tiempo de sala: `HIJO:TIME_UP,<indice>`, `ACCESO:HIJO_ENTRA,<indice>,<t>`,
+`ACCESO:HIJO_SALE,<indice>,<t>` (t negativo = sobregiro).
 
 ---
 
@@ -127,7 +129,7 @@ Al acercar una **tarjeta válida**, la acción depende del lugar:
 |-------|----------------------------|
 | **Puerta principal** | Concede acceso (abre el imán). Si la alarma está **armada**, arranca un **temporizador de 10 s** para desarmar con el código. |
 | **Garaje** | Concede acceso (mueve el servo). Si está **armada**, **15 s** para desarmar. |
-| **Sala de juegos** | **Adulto**: entra libre. **Niño**: descuenta 1 cupo (`SALA OK C:n`); si llega a 0 → `SALA SIN CUPOS`. |
+| **Sala de juegos** | **Adulto**: entra libre. **Niño**: toggle entrada/salida. Al entrar, inicia el descuento de tiempo (cada segundo resta 1). Al salir, se detiene. El tiempo se guarda en **EEPROM** (ya no en la tarjeta). Si se acaba → `HIJO:TIME_UP` y sigue contando **negativo** (sobregiro). |
 
 > **Retardo de desarme**: tras conceder acceso en puerta/garaje con la alarma armada, el
 > LCD muestra la cuenta regresiva `DESARMA EN: Ns`. Si **desarmas a tiempo** con el código,
@@ -167,6 +169,12 @@ cantidad (no se duplica) y el LCD muestra `‹producto› ACTUALIZADO`.
 **Anti-intrusos:** teclear mal el código **3 veces seguidas** dispara la alarma de intruso
 (`!! INTRUSO !!` + LED rojo + `ALARMA:INTRUSO`). Un código correcto reinicia el contador.
 
+**Hijo de pruebas (Fase 0):** el pulsador en **D7 (PH4)** simula la presentación del
+UID `{0x00,0x00,0x00,0x01}`. Se puede enrolar vía `ENROL:HIJO,<seg>,<cod>` (serial) o
+`*62<seg>A<cod>#` (teclado), y luego usar el botón para probar entrada/salida de la sala
+sin tener el hardware RFID conectado. El botón también sirve para "presentar la tarjeta"
+durante enrolamiento, borrado o recarga.
+
 ---
 
 ## 8. Equivalencia teclado ↔ serial
@@ -179,10 +187,11 @@ cantidad (no se duplica) y el LCD muestra `‹producto› ACTUALIZADO`.
 | Sonido ON / OFF · vol | `*21‹v›#` / `*20#` · `*22#`/`*23#` | `SONIDO:ON[,v]` / `SONIDO:OFF` · `VOL:…` |
 | Horno ON (temp, **seg**) / OFF | `*31‹t›A‹s›#` / `*30#` | `HORNO:‹t›,‹s›` |
 | Mercado +/− / lista | `*51‹c›A‹q›#` / `*50‹c›#` / `*59#` | `MERCADO:ADD,…` / `DEL,…` / `LIST` |
-| Enrol adulto / hijo | `*61‹c›#` / `*62‹n›A‹c›#` | `ENROL:ADULTO,‹c›` / `ENROL:HIJO,‹n›,‹c›` |
-| Recargar cupos hijo | `*63‹n›A‹c›#` | `ACCESOS:‹n›,‹c›` |
+| Enrol adulto / hijo (tiempo) | `*61‹c›#` / `*62‹s›A‹c›#` | `ENROL:ADULTO,‹c›` / `ENROL:HIJO,‹s›,‹c›` |
+| Recargar tiempo hijo | `*63‹s›A‹c›#` | `ACCESOS:‹s›,‹c›` |
 | Borrar tarjeta | `*60‹c›#` | `BORRAR,‹c›` |
 | Cambiar de lugar | pulsadores D40 / D39 | — (solo físico) |
+| Simular tarjeta hijo | pulsador D7 (activo bajo) | — (solo físico, Fase 0) |
 
 ---
 

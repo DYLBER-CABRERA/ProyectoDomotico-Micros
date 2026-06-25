@@ -37,6 +37,43 @@ uint8_t eeprom_leer(uint16_t dir) {
     return eeprom_read_byte((const uint8_t*)dir);
 }
 
+// -- eeprom_leer_tiempo(indice) ------------------------------------------------
+int16_t eeprom_leer_tiempo(uint8_t indice) {
+    if (indice >= EEPROM_MAX_UIDS) return 0;
+    uint16_t dir = HIJO_TIEMPO_BASE + (indice * HIJO_TIEMPO_TAM);
+    int16_t t;
+    uint8_t* p = (uint8_t*)&t;
+    p[0] = eeprom_read_byte((const uint8_t*)dir);
+    p[1] = eeprom_read_byte((const uint8_t*)(dir + 1));
+    return t;
+}
+
+// -- eeprom_escribir_tiempo(indice, tiempo) ------------------------------------
+void eeprom_escribir_tiempo(uint8_t indice, int16_t tiempo) {
+    if (indice >= EEPROM_MAX_UIDS) return;
+    uint16_t dir = HIJO_TIEMPO_BASE + (indice * HIJO_TIEMPO_TAM);
+    uint8_t* p = (uint8_t*)&tiempo;
+    if (eeprom_read_byte((const uint8_t*)dir) != p[0])
+        eeprom_write_byte((uint8_t*)dir, p[0]);
+    if (eeprom_read_byte((const uint8_t*)(dir + 1)) != p[1])
+        eeprom_write_byte((uint8_t*)(dir + 1), p[1]);
+}
+
+// -- eeprom_leer_estado(indice) ------------------------------------------------
+uint8_t eeprom_leer_estado(uint8_t indice) {
+    if (indice >= EEPROM_MAX_UIDS) return HIJO_FUERA;
+    uint16_t dir = HIJO_TIEMPO_BASE + (indice * HIJO_TIEMPO_TAM) + 2;
+    return eeprom_read_byte((const uint8_t*)dir);
+}
+
+// -- eeprom_escribir_estado(indice, estado) ------------------------------------
+void eeprom_escribir_estado(uint8_t indice, uint8_t estado) {
+    if (indice >= EEPROM_MAX_UIDS) return;
+    uint16_t dir = HIJO_TIEMPO_BASE + (indice * HIJO_TIEMPO_TAM) + 2;
+    if (eeprom_read_byte((const uint8_t*)dir) != estado)
+        eeprom_write_byte((uint8_t*)dir, estado);
+}
+
 // -- eeprom_buscar_uid(uid) -----------------------------------------------------
 // Busca un UID en los slots. Si lo encuentra, retorna el indice (1-10).
 // Si no existe, retorna 0xFF.

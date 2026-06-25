@@ -148,6 +148,16 @@ static uint8_t  retardo_ult_seg  = 0;   // ultimo segundo mostrado (evita repint
 static uint32_t ultima_resync_lcd = 0;
 #define RESYNC_LCD_MS  2000
 
+// ─── TIEMPO DE SALA (hijos dentro de la sala) ─────────────────────────────
+// Cada cuanto (ms) se descuenta 1 segundo a los hijos activos.
+static uint32_t ultimo_tick_hijos = 0;
+#define INTERVALO_HIJOS  1000
+
+// ─── BOTON DE SIMULACION RFID (D7/PH4, Fase 0) ────────────────────────────
+static uint8_t  btn_sim_prev      = 0;
+static uint32_t btn_sim_ultimo_ms = 0;
+#define BTN_SIM_DEBOUNCE  200
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // a_mayusculas(s)
@@ -206,6 +216,93 @@ static void mostrar_lugar() {
     usart_enviar_string("LUGAR:");
     usart_enviar_int(lugar_actual);
     usart_enviar_newline();
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// hijo_entrar_sala(indice)
+// Marca al hijo como DENTRO, muestra el tiempo disponible en LCD y lo reporta
+// por serial. Lo llama rfid.cpp (manejar_tarjeta_ok) cuando el toggle es entrada.
+// ─────────────────────────────────────────────────────────────────────────────
+void hijo_entrar_sala(uint8_t indice) {
+    eeprom_escribir_estado(indice, HIJO_DENTRO);
+    int16_t t = eeprom_leer_tiempo(indice);
+    lcd_goto(0, 0);
+    lcd_string("SALA: IN T:");
+    lcd_int(t);
+    lcd_string("s ");
+    usart_enviar_string("ACCESO:HIJO_ENTRA,");
+    usart_enviar_int(indice);
+    usart_enviar_string(",");
+    usart_enviar_int(t);
+    usart_enviar_newline();
+    rfid_notifica_lcd();
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// hijo_salir_sala(indice)
+// Marca al hijo como FUERA, guarda el tiempo restante (que pudo haber pasado
+// a negativo por sobregiro) en EEPROM, y lo reporta por serial/LCD.
+// Lo llama rfid.cpp cuando el toggle es salida.
+// ─────────────────────────────────────────────────────────────────────────────
+void hijo_salir_sala(uint8_t indice) {
+    eeprom_escribir_estado(indice, HIJO_FUERA);
+    // NOTA: el tiempo se actualiza en RAM cada segundo (hijo_actualizar_tiempo),
+    // pero se guarda en EEPROM SOLO al salir para no desgastar la memoria.
+    // Si hubo sobregiro (tiempo negativo), ese valor se persiste tal cual.
+    int16_t t = eeprom_leer_tiempo(indice);
+    lcd_goto(0, 0);
+    if (t >= 0) {
+        lcd_string("SALA: OUT T:");
+        lcd_int(t);
+        lcd_string("s ");
+    } else {
+        lcd_string("SALA: SOBREGIRO ");
+        lcd_int(-t);
+        lcd_string("s ");
+    }
+    usart_enviar_string("ACCESO:HIJO_SALE,");
+    usart_enviar_int(indice);
+    usart_enviar_string(",");
+    usart_enviar_int(t);
+    usart_enviar_newline();
+    rfid_notifica_lcd();
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// hijo_actualizar_tiempo()
+// Se llama cada ~1000ms desde el loop. Itera todos los slots de EEPROM y
+// descuenta 1 segundo a cada hijo marcado como HIJO_DENTRO.
+// Cuando un hijo llega exactamente a 0, envia HIJO:TIME_UP por serial.
+// Sigue contando NEGATIVO para reflejar el sobregiro al hacer logout.
+// NO guarda en EEPROM cada tic (desgaste); guarda solo al salir.
+// ─────────────────────────────────────────────────────────────────────────────
+static void hijo_actualizar_tiempo() {
+    for (uint8_t i = 0; i < EEPROM_MAX_UIDS; i++) {
+        uint16_t dir = EEPROM_BASE_UIDS + (i * 5);
+        uint8_t tipo = eeprom_leer(dir + 4);
+        if (tipo != 1) continue;             // solo hijos
+
+        if (eeprom_leer_estado(i) == HIJO_DENTRO) {
+            int16_t t = eeprom_leer_tiempo(i);
+            // Despues de leer el valor en EEPROM, lo decrementamos EN RAM
+            // y escribimos de vuelta.
+            t--;
+            eeprom_escribir_tiempo(i, t);
+
+            if (t == 0) {
+                // Justo llego a cero en este tic
+                usart_enviar_string("HIJO:TIME_UP,");
+                usart_enviar_int(i);
+                usart_enviar_newline();
+                lcd_goto(0, 0);
+                lcd_string("HIJO TIME UP!   ");
+                rfid_notifica_lcd();
+            }
+        }
+    }
 }
 
 
@@ -779,19 +876,19 @@ static void procesar_comando_serial(char* comando) {
         }
         usart_enviar_newline();
 
-    // ── FASE 4: ENROL:HIJO,n,codigo ──────────────────────────────────────
+    // ── FASE 4: ENROL:HIJO,segundos,codigo ─────────────────────────────
     } else if (strncmp(comando, "ENROL:HIJO,", 11) == 0) {
 
-        // Formato: ENROL:HIJO,<cupos>,<codigo>
+        // Formato: ENROL:HIJO,<segundos>,<codigo>
         char* resto = comando + 11;
-        uint8_t cupos = texto_a_numero(resto);
+        uint8_t segundos = texto_a_numero(resto);
         char* coma = strchr(resto, ',');
         char* codigo = (coma != NULL) ? coma + 1 : resto;
 
         if (alarma_verificar_codigo(codigo)) {
-            rfid_entrar_modo_enrol(1, cupos);
+            rfid_entrar_modo_enrol(1, segundos);
             usart_enviar_string("OK:ENROLANDO_HIJO,");
-            usart_enviar_int(cupos);
+            usart_enviar_int(segundos);
         } else {
             reportar_codigo_incorrecto();
         }
@@ -809,19 +906,19 @@ static void procesar_comando_serial(char* comando) {
         }
         usart_enviar_newline();
 
-    // ── FASE 4: ACCESOS:n,codigo ─────────────────────────────────────────
+    // ── FASE 4: ACCESOS:segundos,codigo ────────────────────────────────
     } else if (strncmp(comando, "ACCESOS:", 8) == 0) {
 
-        // Formato: ACCESOS:<n>,<codigo>
+        // Formato: ACCESOS:<segundos>,<codigo>
         char* resto = comando + 8;
-        uint8_t cantidad = texto_a_numero(resto);
+        uint8_t segundos = texto_a_numero(resto);
         char* coma = strchr(resto, ',');
         char* codigo = (coma != NULL) ? coma + 1 : resto;
 
         if (alarma_verificar_codigo(codigo)) {
-            rfid_entrar_modo_recarga(cantidad);
+            rfid_entrar_modo_recarga(segundos);
             usart_enviar_string("OK:RECARGANDO,");
-            usart_enviar_int(cantidad);
+            usart_enviar_int(segundos);
         } else {
             reportar_codigo_incorrecto();
         }
@@ -1111,13 +1208,14 @@ static void ejecutar_comando_teclado(char* cmd) {
             usart_enviar_newline();
             break;
 
-        case 62: { // enrolar hijo: *62<cupos>A<codigo>#
-            // args = "<cupos>A<codigo>", p1 = cupos; extraer codigo tras 'A'
+        case 62: { // enrolar hijo: *62<segundos>A<codigo>#
+            // args = "<segundos>A<codigo>", p1 = segundos; extraer codigo tras 'A'
             char* sep62 = strchr(args, 'A');
             char* codigo62 = (sep62 != NULL) ? sep62 + 1 : args;
             if (alarma_verificar_codigo(codigo62)) {
                 rfid_entrar_modo_enrol(1, p1);
-                lcd_goto(0, 0); lcd_string("ENROL HIJO      ");
+                lcd_goto(0, 0); lcd_string("ENROL HIJO T:");
+                lcd_int(p1); lcd_string("s ");
                 usart_enviar_string("OK:ENROLANDO_HIJO,");
                 usart_enviar_int(p1);
             } else {
@@ -1138,13 +1236,14 @@ static void ejecutar_comando_teclado(char* cmd) {
             usart_enviar_newline();
             break;
 
-        case 63: { // recargar cupos de un hijo: *63<cantidad>A<codigo># y luego pasar la tarjeta
-            // args = "<cantidad>A<codigo>", p1 = cantidad; codigo tras la 'A'
+        case 63: { // recargar tiempo de un hijo: *63<segundos>A<codigo>#
+            // args = "<segundos>A<codigo>", p1 = segundos; codigo tras la 'A'
             char* sep63 = strchr(args, 'A');
             char* codigo63 = (sep63 != NULL) ? sep63 + 1 : args;
             if (alarma_verificar_codigo(codigo63)) {
                 rfid_entrar_modo_recarga(p1);
-                lcd_goto(0, 0); lcd_string("RECARGAR HIJO   ");
+                lcd_goto(0, 0); lcd_string("RECARGAR T:");
+                lcd_int(p1); lcd_string("s ");
                 usart_enviar_string("OK:RECARGANDO,");
                 usart_enviar_int(p1);
             } else {
@@ -1223,6 +1322,11 @@ void setup() {
     DDRG  &= ~((1 << PG1) | (1 << PG2));   // entradas
     PORTG &= ~((1 << PG1) | (1 << PG2));   // sin pull-up interno
 
+    // Boton de simulacion RFID (Fase 0): D7 (PH4) como entrada con pull-up,
+    // activo en BAJO (GND al pulsar). PH no comparte pines con otros modulos.
+    DDRH  &= ~(1 << PH4);                  // PH4 como entrada
+    PORTH |=  (1 << PH4);                  // pull-up interno activado
+
     // sei(): habilita las interrupciones globales poniendo el bit I del SREG en 1.
     // DEBE ir DESPUES de todos los init() porque:
     //   - teclado_init() configuro Timer2 (ya listo para disparar ISR)
@@ -1244,7 +1348,7 @@ void setup() {
     // Enviar el menu de comandos disponibles a la terminal al encender
     usart_enviar_string("Comandos: ARM:xxxx / DISARM:xxxx / LUZ:0-10 / GARAJE:ABRIR / GARAJE:CERRAR");
     usart_enviar_newline();
-    usart_enviar_string("ENROL:ADULTO / ENROL:HIJO,N / BORRAR / ACCESOS:N");
+    usart_enviar_string("ENROL:ADULTO / ENROL:HIJO,seg / BORRAR / ACCESOS:seg");
     usart_enviar_newline();
     usart_enviar_string("HORNO:temp,min / SONIDO:ON[,0-10] / SONIDO:OFF / VOL:N / VOL:+ / VOL:- / MERCADO:ADD,nom,cant / MERCADO:DEL,nom / MERCADO:LIST");
     usart_enviar_newline();
@@ -1352,6 +1456,21 @@ void loop() {
         }
     }
 
+    // ── 1e. BOTON SIMULACION RFID (Fase 0: pruebas sin hardware RC522) ────
+    // D7 (PH4) como entrada con pull-up, activo en BAJO. Cada pulsacion
+    // simula la presentacion del UID del hijo de pruebas (uid_simulado).
+    // Reutiliza rfid_simular_hijo() que llama a manejar_tarjeta_ok().
+    {
+        uint8_t btn_sim = (PINH & (1 << PH4)) ? 0 : 1;  // activo bajo
+        if (millis_sistema() - btn_sim_ultimo_ms >= BTN_SIM_DEBOUNCE) {
+            if (btn_sim_prev == 0 && btn_sim == 1) {
+                rfid_simular_hijo();
+                btn_sim_ultimo_ms = millis_sistema();
+            }
+        }
+        btn_sim_prev = btn_sim;
+    }
+
     // ── 2. TECLADO (Fase 2 + logica de alarma/dimmer) ────────────────────────
     // teclado_hay(): retorna 1 si la ISR del Timer2 deposito una tecla nueva.
     //   Se verifica ANTES de leer para no llamar teclado_leer() sin tecla disponible
@@ -1431,6 +1550,15 @@ void loop() {
         lcd_string("HORNO: LISTO    ");
         usart_enviar_string("HORNO:FIN");
         usart_enviar_newline();
+    }
+
+    // ── 4b. TIEMPO DE SALA (hijos dentro de la sala) ────────────────────────
+    // Cada INTERVALO_HIJOS ms se descuenta 1 segundo a cada hijo activo
+    // (estado == HIJO_DENTRO). Si llega a 0, se notifica por serial; si
+    // se pasa, sigue contando negativo (sobregiro).
+    if (millis_sistema() - ultimo_tick_hijos >= INTERVALO_HIJOS) {
+        ultimo_tick_hijos = millis_sistema();
+        hijo_actualizar_tiempo();
     }
 
     // ── 5. AUTO-RECUPERACION DEL LCD (anti-corrupcion por ruido) ─────────────
