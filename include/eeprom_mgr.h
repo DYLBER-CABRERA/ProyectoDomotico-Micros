@@ -6,6 +6,7 @@
 // 0x000 - 0x09F : hasta 10 UIDs autorizados (4 bytes c/u + 1 tipo)
 // 0x0A0 - 0x0A3 : código de alarma (4 dígitos)
 // 0x0B0 - 0x1FF : lista de mercado
+// 0x200 - 0x279 : historial de accesos RFID (historial.cpp, ring buffer 20 entradas)
 
 #define EEPROM_BASE_UIDS    0x000
 #define EEPROM_MAX_UIDS     10

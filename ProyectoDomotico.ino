@@ -48,6 +48,16 @@
 // Fase 4: logica de acceso por tarjeta
 #include "include/acceso.h"
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SUSTENTACION MICROPROCESADORES — HISTORIAL DE ACCESOS RFID
+// Modulo nuevo: registra en EEPROM interna cada acceso RFID concedido,
+// indicando tipo de usuario (adulto/hijo), lugar (puerta/garaje/sala) y UID.
+// Ring buffer de 20 entradas en 0x200-0x279. Persiste tras reinicios.
+// Comandos: HISTORIAL (serial) / *71# (teclado) para listar.
+//           HISTORIAL:LIMPIAR  / *70# para borrar.
+// ─────────────────────────────────────────────────────────────────────────────
+#include "include/historial.h"
+
 
 // ─── VARIABLES Y CONSTANTES DEL MODULO ──────────────────────────────────────
 // 'static' en el ambito de archivo hace las variables PRIVADAS de este .ino:
@@ -827,6 +837,30 @@ static void procesar_comando_serial(char* comando) {
         }
         usart_enviar_newline();
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // SUSTENTACION MICROPROCESADORES — HISTORIAL DE ACCESOS RFID
+    // Dos comandos seriales nuevos para consultar y borrar el historial.
+    // "HISTORIAL:LIMPIAR" se evalua ANTES que "HISTORIAL": strncmp(cmd,"HISTORIAL",9)
+    // coincide con ambas cadenas, asi que el mas especifico debe ir primero.
+    // ─────────────────────────────────────────────────────────────────────────
+    } else if (strncmp(comando, "HISTORIAL:LIMPIAR", 17) == 0) {
+
+        // Resetea head y count a 0 en EEPROM: el historial queda vacio.
+        // Las entradas fisicas permanecen en EEPROM pero count=0 impide que
+        // historial_listar las lea, equivalente a un borrado logico.
+        historial_limpiar();
+        lcd_goto(0, 0); lcd_string("HIST LIMPIADO   ");
+        usart_enviar_string("OK:HISTORIAL_LIMPIADO");
+        usart_enviar_newline();
+
+    } else if (strncmp(comando, "HISTORIAL", 9) == 0) {
+
+        // Recorre el ring buffer de mas antiguo a mas reciente y envia cada
+        // entrada por USART en formato: ADULTO,PUERTA,AB:CD:EF:12
+        usart_enviar_string("--- HISTORIAL DE ACCESOS ---");
+        usart_enviar_newline();
+        historial_listar();
+
     // ── COMANDO DESCONOCIDO ───────────────────────────────────────────────────
     } else {
         // Ningun prefijo conocido coincidio. Reportar el error sin tomar accion.
@@ -1154,6 +1188,31 @@ static void ejecutar_comando_teclado(char* cmd) {
             break;
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // SUSTENTACION MICROPROCESADORES — HISTORIAL DE ACCESOS RFID
+        // Equivalentes de teclado a los comandos seriales HISTORIAL y
+        // HISTORIAL:LIMPIAR para usar sin terminal (solo con el entrenador).
+        // Prefijo 7x libre: 1x-6x y 9x ya estaban asignados a otros modulos.
+        //   *71# → lista el historial completo por UART
+        //   *70# → borra el historial (resetea punteros en EEPROM)
+        // ─────────────────────────────────────────────────────────────────────
+        case 71: // listar historial por UART: *71#
+            // El listado va a la terminal serial (igual que MERCADO:LIST, no
+            // bloqueante). El LCD solo confirma que el volcado fue enviado.
+            usart_enviar_string("--- HISTORIAL DE ACCESOS ---");
+            usart_enviar_newline();
+            historial_listar();
+            lcd_goto(0, 0); lcd_string("HISTORIAL->UART ");
+            break;
+        case 70: // limpiar historial: *70#
+            // Resetea head=0 y count=0 en EEPROM. No borra entradas fisicamente;
+            // count=0 es suficiente para que historial_listar no recorra nada.
+            historial_limpiar();
+            lcd_goto(0, 0); lcd_string("HIST LIMPIADO   ");
+            usart_enviar_string("OK:HISTORIAL_LIMPIADO");
+            usart_enviar_newline();
+            break;
+
         // ── 9x ALARMA (armar/desarmar con codigo) ────────────────────────────
         case 91: // armar (args = codigo de 4 digitos, ej. *91 1234 #)
             if (alarma_verificar_codigo(args)) {
@@ -1215,6 +1274,12 @@ void setup() {
     _delay_ms(50);      // esperar que oscilador del RC522 estabilice (libreria usa 50ms)
     spi_init();         // SPI maestro (PB0-PB3) para RC522
     eeprom_init();      // gestor de UIDs en EEPROM (0x000-0x09F)
+    // ── SUSTENTACION MICROPROCESADORES — HISTORIAL DE ACCESOS RFID ───────────
+    // historial_init() valida los punteros head/count del ring buffer en EEPROM.
+    // Si la EEPROM esta virgen (0xFF) o los punteros son invalidos los resetea a 0.
+    // Va despues de eeprom_init() y antes de rfid_init() para que el buffer
+    // este listo antes de que el RFID pueda generar el primer acceso concedido.
+    historial_init();   // historial de accesos RFID en EEPROM (0x200-0x279)
     rfid_init();        // modulo RC522 por SPI
     acceso_init();      // iman puerta principal (PG0) + garaje (servo)
 
@@ -1247,6 +1312,8 @@ void setup() {
     usart_enviar_string("ENROL:ADULTO / ENROL:HIJO,N / BORRAR / ACCESOS:N");
     usart_enviar_newline();
     usart_enviar_string("HORNO:temp,min / SONIDO:ON[,0-10] / SONIDO:OFF / VOL:N / VOL:+ / VOL:- / MERCADO:ADD,nom,cant / MERCADO:DEL,nom / MERCADO:LIST");
+    usart_enviar_newline();
+    usart_enviar_string("HISTORIAL / HISTORIAL:LIMPIAR  (teclado: *71# listar / *70# limpiar)");
     usart_enviar_newline();
     pos_codigo = 0; // asegurar que el buffer del codigo empiece vacio (redundante pero explicito)
 }

@@ -5,6 +5,7 @@
 #include "../include/spi_master.h"
 #include "../include/eeprom_mgr.h"
 #include "../include/acceso.h"
+#include "../include/historial.h"
 
 // Declaraciones externas de usart (evita dependencia circular)
 extern void usart_enviar_string(const char* s);
@@ -250,9 +251,7 @@ static uint8_t rc522_autenticar(uint8_t bloque, const uint8_t* uid) {
     return 1;
 }
 
-// ==========================================================================
-// API PUBLICA
-// ==========================================================================
+
 
 // -- rc522_halt() -----------------------------------------------------------
 // Envia HALT a la tarjeta. Despues de HALT la tarjeta no responde a REQA
@@ -630,6 +629,13 @@ static void manejar_tarjeta_ok() {
                 // Adulto: acceso libre a la sala, sin tocar el contador
                 usart_enviar_string("ACCESO:CONCEDIDO_ADULTO"); usart_enviar_newline();
                 lcd_goto(0, 0); lcd_string("SALA: ADULTO    ");
+                // ── SUSTENTACION MICROPROCESADORES — HISTORIAL DE ACCESOS RFID ──
+                // Adulto en SALA: entra libre, sin descuento de cupos.
+                // Se graba en el ring buffer de EEPROM (0x202-0x279):
+                //   tipo  = HIST_TIPO_ADULTO (0)
+                //   lugar = LUGAR_SALA       (2)
+                //   uid   = uid_actual[4] leido por rfid_leer_uid()
+                historial_registrar(HIST_TIPO_ADULTO, LUGAR_SALA, uid_actual);
 
             } else {
                 // Hijo: logica del contador de cupos
@@ -643,6 +649,15 @@ static void manejar_tarjeta_ok() {
                             usart_enviar_int(contador); usart_enviar_newline();
                             lcd_goto(0, 0); lcd_string("                ");
                             lcd_goto(0, 0); lcd_string("SALA OK C:"); lcd_int(contador);
+                            // ── SUSTENTACION MICROPROCESADORES — HISTORIAL DE ACCESOS RFID ──
+                            // Hijo en SALA: cupos > 0 Y escritura en tarjeta MIFARE exitosa.
+                            // Se registra SOLO si AMBAS condiciones se cumplen: sin cupos o
+                            // con fallo en rfid_escribir_contador el acceso no fue concedido
+                            // y no debe aparecer en el historial.
+                            //   tipo  = HIST_TIPO_HIJO (1)
+                            //   lugar = LUGAR_SALA     (2)
+                            //   uid   = uid_actual[4]
+                            historial_registrar(HIST_TIPO_HIJO, LUGAR_SALA, uid_actual);
                         } else {
                             acceso_denegado();
                             usart_enviar_string("ERROR:ESCRIBIR_CONTADOR"); usart_enviar_newline();
@@ -665,6 +680,21 @@ static void manejar_tarjeta_ok() {
             usart_enviar_string("ACCESO:CONCEDIDO_GARAJE"); usart_enviar_newline();
             lcd_goto(0, 0); lcd_string("ACCESO GARAJE   ");
             acceso_iniciar_retardo(15);
+            {
+                // ── SUSTENTACION MICROPROCESADORES — HISTORIAL DE ACCESOS RFID ──
+                // GARAJE: cualquier tarjeta autorizada abre el servo sin importar
+                // si es adulto o hijo. Para el historial SI importa el tipo, por
+                // eso se lee el byte de tipo del slot de EEPROM usando el indice
+                // que eeprom_buscar_uid() ya encontro en la linea de mas arriba.
+                // Formula: EEPROM_BASE_UIDS + indice*5 + 4 → byte de tipo
+                //          (0 = adulto / 1 = hijo, igual que HIST_TIPO_*)
+                //   tipo  = segun EEPROM del slot enrolado
+                //   lugar = LUGAR_GARAJE (1)
+                //   uid   = uid_actual[4]
+                uint8_t tipo_g = eeprom_leer(EEPROM_BASE_UIDS + (indice * 5u) + 4u);
+                historial_registrar(tipo_g == 0 ? HIST_TIPO_ADULTO : HIST_TIPO_HIJO,
+                                    LUGAR_GARAJE, uid_actual);
+            }
 
         } else {
             // ── PUERTA PRINCIPAL: abrir iman + 10s para desarmar ────────
@@ -672,6 +702,21 @@ static void manejar_tarjeta_ok() {
             usart_enviar_string("ACCESO:CONCEDIDO_PUERTA"); usart_enviar_newline();
             lcd_goto(0, 0); lcd_string("ACCESO PUERTA   ");
             acceso_iniciar_retardo(10);
+            {
+                // ── SUSTENTACION MICROPROCESADORES — HISTORIAL DE ACCESOS RFID ──
+                // PUERTA PRINCIPAL: el iman abre para cualquier tarjeta autorizada
+                // sin distincion de tipo. Para el historial SI importa el tipo,
+                // por eso se lee el byte de tipo del slot de EEPROM usando el
+                // indice que eeprom_buscar_uid() ya encontro mas arriba.
+                // Formula: EEPROM_BASE_UIDS + indice*5 + 4 → byte de tipo
+                //          (0 = adulto / 1 = hijo, igual que HIST_TIPO_*)
+                //   tipo  = segun EEPROM del slot enrolado
+                //   lugar = LUGAR_PUERTA (0)
+                //   uid   = uid_actual[4]
+                uint8_t tipo_p = eeprom_leer(EEPROM_BASE_UIDS + (indice * 5u) + 4u);
+                historial_registrar(tipo_p == 0 ? HIST_TIPO_ADULTO : HIST_TIPO_HIJO,
+                                    LUGAR_PUERTA, uid_actual);
+            }
         }
     }
 
