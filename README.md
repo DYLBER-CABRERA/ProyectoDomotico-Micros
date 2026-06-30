@@ -2,7 +2,7 @@
 
 Firmware de un sistema domótico sobre **Arduino Mega 2560**, escrito en **registros
 directos del AVR, sin librerías de Arduino**. Proyecto de Microprocesadores 2026-1.
-Autores: **Dylber Cabrera** y **Juan David Ocampo**.
+Autores: **Dylber Cabrera**, **Juan David Ocampo**, **Alejandro Martínez**.
 
 Controla seguridad (alarma de acceso + incendio + anti-intrusos, acceso por RFID con
 3 lugares y contador de la sala de juegos) y confort (luz dimerizable, temperatura con
